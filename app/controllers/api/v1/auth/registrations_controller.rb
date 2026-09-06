@@ -6,13 +6,14 @@ module Api
           user = User.new(user_params)
 
           if user.save
-              render json: {
-                user: {
-                  id: user.id,
-                  email: user.email,
-                  status: user.status
-                }
-              }, status: :created
+            user.create_kyc_profile!(status: "pending")
+            render json: {
+              user: {
+                id: user.id,
+                email: user.email,
+                status: user.status
+              }
+            }, status: :created
           else
             render json: {
               errors: user.errors.full_messages

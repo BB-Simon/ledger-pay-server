@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  user: one
+  status: MyString
+  verification_level: MyString
+  verified_at: 2026-09-06 20:21:22
+
+two:
+  user: two
+  status: MyString
+  verification_level: MyString
+  verified_at: 2026-09-06 20:21:22

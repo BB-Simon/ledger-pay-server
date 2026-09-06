@@ -7,7 +7,8 @@ Rails.application.routes.draw do
         post "login", to: "sessions#create"
       end
 
-      get "me", to: "auth/me#show"
+      get "me", to: "me#show"
+      get "kyc", to: "kyc#show"
     end
   end
 

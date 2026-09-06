@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_secure_password
 
   has_many :auth_tokens, dependent: :destroy
+  has_one :kyc_profile, dependent: :destroy
 
   before_validation :normalize_email
 
