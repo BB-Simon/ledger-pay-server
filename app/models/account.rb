@@ -1,5 +1,5 @@
 class Account < ApplicationRecord
-  belongs_to :wallet
+  belongs_to :wallet, optional: true
   belongs_to :currency
 
   has_many :ledger_entries, dependent: :restrict_with_error
