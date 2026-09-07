@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_06_234224) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_06_235249) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -53,6 +53,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_06_234224) do
     t.index ["status"], name: "index_users_on_status"
   end
 
+  create_table "wallets", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "currency_id", null: false
+    t.string "status"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["currency_id"], name: "index_wallets_on_currency_id"
+    t.index ["user_id", "currency_id"], name: "index_wallets_on_user_id_and_currency_id", unique: true
+    t.index ["user_id"], name: "index_wallets_on_user_id"
+  end
+
   add_foreign_key "auth_tokens", "users"
   add_foreign_key "kyc_profiles", "users"
+  add_foreign_key "wallets", "currencies"
+  add_foreign_key "wallets", "users"
 end
