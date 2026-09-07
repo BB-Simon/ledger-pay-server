@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_07_002515) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_07_021429) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -54,6 +54,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_002515) do
     t.index ["user_id"], name: "index_kyc_profiles_on_user_id"
   end
 
+  create_table "ledger_entries", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "amount", null: false
+    t.datetime "created_at", null: false
+    t.string "entry_type", null: false
+    t.bigint "ledger_transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_ledger_entries_on_account_id"
+    t.index ["entry_type"], name: "index_ledger_entries_on_entry_type"
+    t.index ["ledger_transaction_id"], name: "index_ledger_entries_on_ledger_transaction_id"
+  end
+
+  create_table "transactions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "currency_id", null: false
+    t.string "reference", null: false
+    t.string "status", default: "posted", null: false
+    t.string "transaction_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["currency_id"], name: "index_transactions_on_currency_id"
+    t.index ["reference"], name: "index_transactions_on_reference", unique: true
+  end
+
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -79,6 +102,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_002515) do
   add_foreign_key "accounts", "wallets"
   add_foreign_key "auth_tokens", "users"
   add_foreign_key "kyc_profiles", "users"
+  add_foreign_key "ledger_entries", "accounts"
+  add_foreign_key "ledger_entries", "transactions", column: "ledger_transaction_id"
+  add_foreign_key "transactions", "currencies"
   add_foreign_key "wallets", "currencies"
   add_foreign_key "wallets", "users"
 end

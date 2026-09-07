@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  reference: MyString
+  transaction_type: MyString
+  status: MyString
+  currency: one
+
+two:
+  reference: MyString
+  transaction_type: MyString
+  status: MyString
+  currency: two
