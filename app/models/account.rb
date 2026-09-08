@@ -15,7 +15,21 @@ class Account < ApplicationRecord
   validates :status, presence: true
   validate :currency_must_match_wallet_currency
 
+  def balance
+    ledger_entries.sum do |entry|
+      if increses_with_debit?
+        entry.debit? ? entry.amount : -entry.amount
+      else
+        entry.credit? ? entry.amount : -entry.amount
+      end
+    end
+  end
+
   private
+
+  def increses_with_debit?
+    asset?  || expense?
+  end
 
   def currency_must_match_wallet_currency
     return unless wallet && currency
