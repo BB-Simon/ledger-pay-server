@@ -5,6 +5,8 @@ class User < ApplicationRecord
   has_one :kyc_profile, dependent: :destroy
   has_many :wallets, dependent: :restrict_with_error
 
+  has_many :payments, dependent: :restrict_with_error
+
   has_many :idempotency_key, dependent: :restrict_with_error
 
   before_validation :normalize_email
