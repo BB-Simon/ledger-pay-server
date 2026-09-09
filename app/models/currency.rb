@@ -1,6 +1,8 @@
 class Currency < ApplicationRecord
   has_many :wallets, dependent: :restrict_with_error
 
+  has_many :payments, dependent: :restrict_with_error
+
   before_validation :normalize_code
 
   validates :code, presence: true, uniqueness: true

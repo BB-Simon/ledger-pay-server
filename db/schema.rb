@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_220102) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_09_223840) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -82,6 +82,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_220102) do
     t.index ["ledger_transaction_id"], name: "index_ledger_entries_on_ledger_transaction_id"
   end
 
+  create_table "payments", force: :cascade do |t|
+    t.bigint "amount", null: false
+    t.datetime "created_at", null: false
+    t.bigint "currency_id", null: false
+    t.string "provider", null: false
+    t.string "provider_payment_id"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.bigint "wallet_id", null: false
+    t.index ["currency_id"], name: "index_payments_on_currency_id"
+    t.index ["provider", "provider_payment_id"], name: "index_payments_on_provider_and_provider_payment_id", unique: true
+    t.index ["user_id"], name: "index_payments_on_user_id"
+    t.index ["wallet_id"], name: "index_payments_on_wallet_id"
+  end
+
   create_table "transactions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "currency_id", null: false
@@ -122,6 +138,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_220102) do
   add_foreign_key "kyc_profiles", "users"
   add_foreign_key "ledger_entries", "accounts"
   add_foreign_key "ledger_entries", "transactions", column: "ledger_transaction_id"
+  add_foreign_key "payments", "currencies"
+  add_foreign_key "payments", "users"
+  add_foreign_key "payments", "wallets"
   add_foreign_key "transactions", "currencies"
   add_foreign_key "wallets", "currencies"
   add_foreign_key "wallets", "users"
