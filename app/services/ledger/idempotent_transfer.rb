@@ -1,8 +1,7 @@
 require "digest"
-
 module Ledger
   class IdempotentTransfer
-    def call(
+    def self.call(
       from_wallet:,
       to_wallet:,
       amount:,
@@ -15,7 +14,7 @@ module Ledger
       amount: amount,
       user: user,
       idempotency_key: idempotency_key
-    )
+    ).call
     end
 
     def initialize(
@@ -37,9 +36,7 @@ module Ledger
 
       record = find_or_create_idempotency_key(request_hash)
 
-      if record.transaction
-        record.transaction
-      end
+      return  record.ledger_transaction if record.ledger_transaction
 
       transfer = Ledger::Transfer.call(
         from_wallet: @from_wallet,
@@ -48,9 +45,9 @@ module Ledger
         reference: SecureRandom.uuid
       )
 
-      redord.update!(
+      record.update!(
         status: "completed",
-        transaction: transfer
+        ledger_transaction: transfer
       )
 
       transfer
