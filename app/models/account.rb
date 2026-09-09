@@ -13,6 +13,8 @@ class Account < ApplicationRecord
   }
 
   validates :status, presence: true
+  validates :code, presence: true, uniqueness: true
+  validates :name, presence: true
   validate :currency_must_match_wallet_currency
 
   def balance
