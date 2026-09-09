@@ -1,6 +1,7 @@
 class Transaction < ApplicationRecord
   belongs_to :currency
 
+  has_one :idempotency_key, dependent: :nullify
   has_many :ledger_entries, foreign_key: :ledger_transaction_id, dependent: :restrict_with_error
 
   enum :transaction_type, {

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_07_021429) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_09_120701) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -42,6 +42,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_021429) do
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.index ["code"], name: "index_currencies_on_code", unique: true
+  end
+
+  create_table "idempotency_keys", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "request_hash", null: false
+    t.string "status", default: "processing", null: false
+    t.bigint "transaction_id"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["transaction_id"], name: "index_idempotency_keys_on_transaction_id"
+    t.index ["user_id", "key"], name: "index_idempotency_keys_on_user_id_and_key", unique: true
+    t.index ["user_id"], name: "index_idempotency_keys_on_user_id"
   end
 
   create_table "kyc_profiles", force: :cascade do |t|
@@ -101,6 +114,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_021429) do
   add_foreign_key "accounts", "currencies"
   add_foreign_key "accounts", "wallets"
   add_foreign_key "auth_tokens", "users"
+  add_foreign_key "idempotency_keys", "transactions"
+  add_foreign_key "idempotency_keys", "users"
   add_foreign_key "kyc_profiles", "users"
   add_foreign_key "ledger_entries", "accounts"
   add_foreign_key "ledger_entries", "transactions", column: "ledger_transaction_id"
