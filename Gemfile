@@ -35,6 +35,9 @@ gem "image_processing", "~> 1.2"
 # Password hashing and encryption [https://github.com/codahale/bcrypt-ruby]
 gem "bcrypt"
 
+# Stripe payment processing [https://stripe.com/docs]
+gem "stripe"
+
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin Ajax possible
 # gem "rack-cors"
 
