@@ -7,6 +7,10 @@ Rails.application.routes.draw do
         post "login", to: "sessions#create"
       end
 
+      namespace :webhooks do
+        post "stripe", to: "stripe#create"
+      end
+
       get "me", to: "me#show"
       get "kyc", to: "kyc#show"
       post "transfers", to: "transfers#create"
