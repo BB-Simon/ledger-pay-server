@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_223840) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_10_161455) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -128,6 +128,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_223840) do
     t.index ["currency_id"], name: "index_wallets_on_currency_id"
     t.index ["user_id", "currency_id"], name: "index_wallets_on_user_id_and_currency_id", unique: true
     t.index ["user_id"], name: "index_wallets_on_user_id"
+  end
+
+  create_table "webhook_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_id", null: false
+    t.string "event_type", null: false
+    t.text "payload", null: false
+    t.datetime "processed_at"
+    t.string "provider", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider", "event_id"], name: "index_webhook_events_on_provider_and_event_id", unique: true
   end
 
   add_foreign_key "accounts", "currencies"
