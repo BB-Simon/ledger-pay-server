@@ -14,12 +14,16 @@ module Api
           )
           Rails.logger.info "Stripe webhook received: #{event.id} #{event.type}"
 
+          Payments::ProcessStripeWebhook.call(event: event)
+
           render json: { received: true }, status: :ok
 
         rescue JSON::ParserError
           render json: { error: "Invalid payload" }, status: :bad_request
         rescue Stripe::SignatureVerificationError
           render json: { error: "Invalid signature" }, status: :bad_request
+        rescue ArgumentError => e
+          render json: { error: e.message }, status: :unprocessable_entity
         end
       end
     end
