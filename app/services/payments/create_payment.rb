@@ -46,7 +46,10 @@ module Payments
         provider_payment_id: intent.id
       )
 
-      payment
+      {
+        payment: payment,
+        client_secret: intent.client_secret
+      }
     end
 
     private
