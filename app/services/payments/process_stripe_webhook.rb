@@ -11,19 +11,24 @@ module Payments
     def call
       webhook_event = save_event!
 
-      return webhook_event if webhook_event.processed?
+      WebhookEvent.transaction do
+        webhook_event.lock!
 
-      case @event.type
-      when "payment_intent.succeeded"
-        process_payment_intent_succeeded!
-      else
-        Rails.logger.info "Ignore unsuported event #{@event.type}"
+        return webhook_event if webhook_event.processed?
+
+        case @event.type
+        when "payment_intent.succeeded"
+          process_payment_intent_succeeded!
+        else
+          Rails.logger.info "Ignore unsuported event #{@event.type}"
+        end
+
+        webhook_event.update!(
+          status: :processed,
+          processed_at: Time.current
+        )
       end
 
-      webhook_event.update!(
-        status: :processed,
-        processed_at: Time.current
-      )
 
       webhook_event
     end
@@ -48,12 +53,12 @@ module Payments
 
       raise ArgumentError, "Payment ID is missing  from stripe metadata" if payment_id.blank?
 
-      payment = Payment.find(payment_id)
-      nil if payment.succeeded?
-
-      validate_payment!(payment, intent)
-
       Payment.transaction do
+        payment = Payment.lock.find(payment_id)
+        return if payment.succeeded?
+
+        validate_payment!(payment, intent)
+
         payment.update!(status: :succeeded)
 
         Ledger::Deposit.call(
