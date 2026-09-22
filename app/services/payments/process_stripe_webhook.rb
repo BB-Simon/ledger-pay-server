@@ -19,6 +19,13 @@ module Payments
         case @event.type
         when "payment_intent.succeeded"
           process_payment_intent_succeeded!
+
+        when "payment_intent.payment_failed"
+          process_payment_intent_payment_failed!
+
+        when "payment_intent.canceled"
+          process_payment_intent_canceled!
+
         else
           Rails.logger.info "Ignore unsuported event #{@event.type}"
         end
@@ -49,12 +56,10 @@ module Payments
 
     def process_payment_intent_succeeded!
       intent = @event.data.object
-      payment_id = intent.metadata[:payment_id]
-
-      raise ArgumentError, "Payment ID is missing  from stripe metadata" if payment_id.blank?
+      payment = find_payment_from_intent!(intent)
 
       Payment.transaction do
-        payment = Payment.lock.find(payment_id)
+        payment = Payment.lock.find(payment.id)
         return if payment.succeeded?
 
         validate_payment!(payment, intent)
@@ -66,6 +71,38 @@ module Payments
           amount: payment.amount,
           reference: "PAYMENT-#{payment.id}"
         )
+      end
+    end
+
+    def process_payment_intent_payment_failed!
+      intent = @event.data.object
+
+      payment = find_payment_from_intent!(intent)
+
+      Payment.transaction do
+        payment = Payment.lock.find(payment.id)
+
+        return if payment.succeeded? || payment.failed? || payment.canceled?
+
+        validate_payment!(payment, intent)
+
+        payment.update!(status: :failed)
+      end
+    end
+
+    def process_payment_intent_canceled!
+      intent = @event.data.object
+
+      payment = find_payment_from_intent!(intent)
+
+      Payment.transaction do
+        payment = Payment.lock.find(payment.id)
+
+        return if payment.succeeded? || payment.failed? || payment.canceled?
+
+        validate_payment!(payment, intent)
+
+        payment.update!(status: :canceled)
       end
     end
 
@@ -81,6 +118,14 @@ module Payments
       unless payment.amount == intent.amount
         raise ArgumentError, "Payment amount does not match"
       end
+    end
+
+    def find_payment_from_intent!(intent)
+      payment_id = intent.metadata[:payment_id]
+
+      raise ArgumentError, "Payment ID is missing  from stripe metadata" if payment_id.blank?
+
+      Payment.find(payment_id)
     end
   end
 end
