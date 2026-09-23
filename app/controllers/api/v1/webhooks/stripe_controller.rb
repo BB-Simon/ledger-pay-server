@@ -23,6 +23,7 @@ module Api
         rescue Stripe::SignatureVerificationError
           render json: { error: "Invalid signature" }, status: :bad_request
         rescue ArgumentError => e
+          Rails.logger.error "Stripe webhook argument error: #{e.message}"
           render json: { error: e.message }, status: :unprocessable_entity
         end
       end

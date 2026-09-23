@@ -27,7 +27,7 @@ module Payments
           process_payment_intent_canceled!
 
         else
-          Rails.logger.info "Ignore unsuported event #{@event.type}"
+          Rails.logger.info "Ignore unsupported event #{@event.type}"
         end
 
         webhook_event.update!(
@@ -121,7 +121,7 @@ module Payments
     end
 
     def find_payment_from_intent!(intent)
-      payment_id = intent.metadata[:payment_id]
+      payment_id = intent.metadata["payment_id"]
 
       raise ArgumentError, "Payment ID is missing  from stripe metadata" if payment_id.blank?
 

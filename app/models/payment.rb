@@ -7,7 +7,7 @@ class Payment < ApplicationRecord
     pending: "pending",
     succeeded: "succeeded",
     failed: "failed",
-    cancelled: "cancelled"
+    canceled: "canceled"
   }
   validates :amount, numericality: {
     only_integer: true,
