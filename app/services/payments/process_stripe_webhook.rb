@@ -86,7 +86,11 @@ module Payments
 
         validate_payment!(payment, intent)
 
-        payment.update!(status: :failed)
+        payment.update!(
+          status: :failed,
+          failure_code: intent.last_payment_error&.code,
+          failure_message: intent.last_payment_error&.message
+        )
       end
     end
 

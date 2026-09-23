@@ -15,6 +15,7 @@ Rails.application.routes.draw do
       get "kyc", to: "kyc#show"
       post "transfers", to: "transfers#create"
       post "payments", to: "payments#create"
+      get "payments/:id", to: "payments#show"
     end
   end
 
