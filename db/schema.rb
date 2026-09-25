@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_23_204720) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_23_210917) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -100,6 +100,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_204720) do
     t.index ["wallet_id"], name: "index_payments_on_wallet_id"
   end
 
+  create_table "refunds", force: :cascade do |t|
+    t.bigint "amount", null: false
+    t.datetime "created_at", null: false
+    t.bigint "payment_id", null: false
+    t.string "provider", null: false
+    t.string "provider_refund_id"
+    t.string "reason"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["payment_id"], name: "index_refunds_on_payment_id"
+    t.index ["provider", "provider_refund_id"], name: "index_refunds_on_provider_and_provider_refund_id", unique: true
+  end
+
   create_table "transactions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "currency_id", null: false
@@ -155,6 +168,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_204720) do
   add_foreign_key "payments", "currencies"
   add_foreign_key "payments", "users"
   add_foreign_key "payments", "wallets"
+  add_foreign_key "refunds", "payments"
   add_foreign_key "transactions", "currencies"
   add_foreign_key "wallets", "currencies"
   add_foreign_key "wallets", "users"

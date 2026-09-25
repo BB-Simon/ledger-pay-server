@@ -25,6 +25,28 @@ module Api
         render json: payment_json(payment)
       end
 
+      def create_refund
+        payment = current_user.payments.find(params[:payment_id])
+
+        result = Payments::CreateRefund.call(
+          payment: payment,
+          amount: params[:amount].to_i,
+          reason: params[:reason]
+        )
+
+        refund = result[:refund]
+
+        render json: refund_json(refund),
+          status: :created
+
+      rescue ArgumentError => e
+        render json: { error: e.message },
+          status: :unprocessable_entity
+      rescue Stripe::StripeError => e
+        render json: { error: e.message },
+          status: :unprocessable_entity
+      end
+
       private
 
       def payment_json(payment, client_secret = nil)
@@ -39,6 +61,19 @@ module Api
           failure_message: payment.failure_message,
           client_secret: client_secret
       }.compact
+      end
+
+      def refund_json(refund)
+        {
+          id: refund.id,
+          payment_id: refund.payment_id,
+          amount: refund.amount,
+          currency: refund.payment.currency.code,
+          provider: refund.provider,
+          provider_refund_id: refund.provider_refund_id,
+          status: refund.status,
+          reason: refund.reason
+        }.compact
       end
     end
   end

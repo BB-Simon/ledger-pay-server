@@ -16,6 +16,7 @@ Rails.application.routes.draw do
       post "transfers", to: "transfers#create"
       post "payments", to: "payments#create"
       get "payments/:id", to: "payments#show"
+      post "payments/:payment_id/refunds", to: "payments#create_refund"
     end
   end
 
