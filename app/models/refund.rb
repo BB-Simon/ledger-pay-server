@@ -1,9 +1,5 @@
-class Payment < ApplicationRecord
-  belongs_to :user
-  belongs_to :wallet
-  belongs_to :currency
-
-  has_many :refunds, dependent: :restrict_with_error
+class Refund < ApplicationRecord
+  belongs_to :payment
 
   enum :status, {
     pending: "pending",
@@ -11,9 +7,11 @@ class Payment < ApplicationRecord
     failed: "failed",
     canceled: "canceled"
   }
+
   validates :amount, numericality: {
     only_integer: true,
     greater_than: 0
   }
+
   validates :provider, presence: true
 end
