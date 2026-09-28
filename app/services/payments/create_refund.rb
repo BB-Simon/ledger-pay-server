@@ -11,15 +11,19 @@ module Payments
     end
 
     def call
-      validate!
+      refund = Payment.transaction do
+        @payment = Payment.lock.find(@payment.id)
 
-      refund = Refund.create!(
-        payment: @payment,
-        amount: @amount,
-        provider: "stripe",
-        status: :pending,
-        reason: @reason
-      )
+        validate!
+
+        Refund.create!(
+          payment: @payment,
+          amount: @amount,
+          provider: "stripe",
+          status: :pending,
+          reason: @reason
+        )
+      end
 
       stripe_refund = Stripe::Refund.create(
         payment_intent: @payment.provider_payment_id,
@@ -45,14 +49,22 @@ module Payments
       raise ArgumentError, "Payment provider must be Stripe" unless
         @payment.provider == "stripe"
 
-      raise ArgumentError, "Payment has already been fully refunded" if
-        @payment.refunds.where(status: [ :pending, :succeeded ]).exists?
-
-      raise ArgumentError, "Refund amount must equal payment amount" unless
-        @amount == @payment.amount
+      raise ArgumentError, "Amount must be a positive integer" unless
+        @amount.is_a?(Integer) && @amount > 0
 
       raise ArgumentError, "Wallet must be active" unless
         @payment.wallet.status == "active"
+
+      raise ArgumentError, "Refund amount exceeds refundable amount" unless
+        @amount <= refundable_amount
+    end
+
+    def refundable_amount
+      refunded_amount = @payment.refunds
+        .where(status: [ :pending, :succeeded ])
+        .sum(:amount)
+
+      @payment.amount - refunded_amount
     end
   end
 end

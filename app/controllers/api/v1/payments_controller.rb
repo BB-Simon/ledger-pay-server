@@ -47,6 +47,14 @@ module Api
           status: :unprocessable_entity
       end
 
+      def refunds
+        payment = current_user.payments.find(params[:payment_id])
+
+        render json: payment.refunds.order(created_at: :desc).map { |refund|
+         refund_json(refund)
+        }
+      end
+
       private
 
       def payment_json(payment, client_secret = nil)
@@ -59,7 +67,9 @@ module Api
           provider_payment_id: payment.provider_payment_id,
           failure_code: payment.failure_code,
           failure_message: payment.failure_message,
-          client_secret: client_secret
+          client_secret: client_secret,
+          refunded_amount: payment.refunded_amount,
+          refundable_amount: payment.refundable_amount
       }.compact
       end
 

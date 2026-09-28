@@ -16,4 +16,14 @@ class Payment < ApplicationRecord
     greater_than: 0
   }
   validates :provider, presence: true
+
+  def refunded_amount
+    refunds
+      .where(status: [ :pending, :succeeded ])
+      .sum(:amount)
+  end
+
+  def refundable_amount
+    amount - refunded_amount
+  end
 end
