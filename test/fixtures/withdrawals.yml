@@ -1,0 +1,23 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  user: one
+  wallet: one
+  amount: 
+  currency: one
+  provider: MyString
+  provider_withdrawal_id: MyString
+  status: MyString
+  failure_code: MyString
+  failure_message: MyText
+
+two:
+  user: two
+  wallet: two
+  amount: 
+  currency: two
+  provider: MyString
+  provider_withdrawal_id: MyString
+  status: MyString
+  failure_code: MyString
+  failure_message: MyText

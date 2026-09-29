@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_23_210917) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_28_170345) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -157,6 +157,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_210917) do
     t.index ["provider", "event_id"], name: "index_webhook_events_on_provider_and_event_id", unique: true
   end
 
+  create_table "withdrawals", force: :cascade do |t|
+    t.bigint "amount", null: false
+    t.datetime "created_at", null: false
+    t.bigint "currency_id", null: false
+    t.string "failure_code"
+    t.text "failure_message"
+    t.string "provider", null: false
+    t.string "provider_withdrawal_id"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.bigint "wallet_id", null: false
+    t.index ["currency_id"], name: "index_withdrawals_on_currency_id"
+    t.index ["provider", "provider_withdrawal_id"], name: "index_withdrawals_on_provider_and_provider_withdrawal_id", unique: true
+    t.index ["user_id"], name: "index_withdrawals_on_user_id"
+    t.index ["wallet_id"], name: "index_withdrawals_on_wallet_id"
+  end
+
   add_foreign_key "accounts", "currencies"
   add_foreign_key "accounts", "wallets"
   add_foreign_key "auth_tokens", "users"
@@ -172,4 +190,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_23_210917) do
   add_foreign_key "transactions", "currencies"
   add_foreign_key "wallets", "currencies"
   add_foreign_key "wallets", "users"
+  add_foreign_key "withdrawals", "currencies"
+  add_foreign_key "withdrawals", "users"
+  add_foreign_key "withdrawals", "wallets"
 end
