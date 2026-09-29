@@ -9,6 +9,8 @@ class User < ApplicationRecord
 
   has_many :idempotency_key, dependent: :restrict_with_error
 
+  has_many :withdrawals, dependent: :restrict_with_error
+
   before_validation :normalize_email
 
   validates :email, presence: true, uniqueness: true

@@ -6,5 +6,7 @@ class Wallet < ApplicationRecord
 
   has_many :payments, dependent: :restrict_with_error
 
+  has_many :withdrawals, dependent: :restrict_with_error
+
   validates :status, presence: true
 end
