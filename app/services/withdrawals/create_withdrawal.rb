@@ -50,7 +50,7 @@ module Withdrawals
 
     def validate_wallet_balance!(wallet)
       raise ArgumentError, "Insufficient wallet balance" unless
-        wallet.account.balance >= @amount
+        wallet.available_balance >= @amount
     end
   end
 end

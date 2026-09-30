@@ -9,4 +9,14 @@ class Wallet < ApplicationRecord
   has_many :withdrawals, dependent: :restrict_with_error
 
   validates :status, presence: true
+
+  def pending_withdrawal_amount
+    withdrawals
+      .where(status: :pending)
+      .sum(:amount)
+  end
+
+  def available_balance
+    account.balance - pending_withdrawal_amount
+  end
 end
