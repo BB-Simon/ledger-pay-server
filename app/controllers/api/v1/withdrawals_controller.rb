@@ -20,6 +20,21 @@ module Api
           status: :unprocessable_entity
       end
 
+      def index
+        withdrawals = current_user.withdrawals
+          .order(created_at: :desc)
+
+        render json: withdrawals.map { |withdrawal|
+          withdrawal_json(withdrawal)
+        }
+      end
+
+      def show
+        withdrawal = current_user.withdrawals.find(params[:id])
+
+        render json: withdrawal_json(withdrawal)
+      end
+
       private
 
       def withdrawal_json(withdrawal)
