@@ -81,6 +81,17 @@ module Payments
           amount: payment.amount,
           reference: "PAYMENT-#{payment.id}"
         )
+
+        AuditLogs::Record.call(
+          action: "payment.succeeded",
+          auditable: payment,
+          user: payment.user,
+          metadata: {
+            amount: payment.amount,
+            currency: payment.currency.code,
+            provider_payment_id: payment.provider_payment_id
+          }
+        )
       end
     end
 
@@ -101,6 +112,16 @@ module Payments
           failure_code: intent.last_payment_error&.code,
           failure_message: intent.last_payment_error&.message
         )
+
+        AuditLogs::Record.call(
+          action: "payment.failed",
+          auditable: payment,
+          user: payment.user,
+          metadata: {
+            failure_code: payment.failure_code,
+            failure_message: payment.failure_message
+          }
+        )
       end
     end
 
@@ -117,6 +138,15 @@ module Payments
         validate_payment!(payment, intent)
 
         payment.update!(status: :canceled)
+
+        AuditLogs::Record.call(
+          action: "payment.canceled",
+          auditable: payment,
+          user: payment.user,
+          metadata: {
+            provider_payment_id: payment.provider_payment_id
+          }
+        )
       end
     end
 
@@ -204,6 +234,17 @@ module Payments
         )
 
         Ledger::Refund.call(refund: refund)
+
+        AuditLogs::Record.call(
+          action: "refund.succeeded",
+          auditable: refund,
+          user: refund.payment.user,
+          metadata: {
+            amount: refund.amount,
+            currency: refund.payment.currency.code,
+            provider_refund_id: refund.provider_refund_id
+          }
+        )
       end
     end
 
@@ -220,6 +261,15 @@ module Payments
 
         refund.update!(
           status: :failed
+        )
+
+        AuditLogs::Record.call(
+          action: "refund.failed",
+          auditable: refund,
+          user: refund.payment.user,
+          metadata: {
+            provider_refund_id: refund.provider_refund_id
+          }
         )
       end
     end
@@ -259,6 +309,16 @@ module Payments
         Ledger::Withdraw.call(
           withdrawal: withdrawal
         )
+
+        AuditLogs::Record.call(
+          action: "withdrawal.succeeded",
+          auditable: withdrawal,
+          user: @user,
+          metadata: {
+            amount: withdrawal.amount,
+            currency: withdrawal.currency.code
+          }
+        )
       end
     end
 
@@ -278,7 +338,30 @@ module Payments
           Ledger::ReverseWithdrawal.call(
             withdrawal: withdrawal
           )
+
+          AuditLogs::Record.call(
+            action: "withdrawal.reversed",
+            auditable: withdrawal,
+            user: withdrawal.user,
+            metadata: {
+              amount: withdrawal.amount,
+              currency: withdrawal.currency.code,
+              reversal_reference: withdrawal.reversal_reference,
+              reason: withdrawal.failure_message
+            }
+          )
         end
+
+        AuditLogs::Record.call(
+          action: "withdrawal.failed",
+          auditable: withdrawal,
+          user: @user,
+          metadata: {
+            amount: withdrawal.amount,
+            currency: withdrawal.currency.code,
+            late_failure: withdrawal.succeeded?
+          }
+        )
 
         withdrawal.update!(
           status: :failed,
@@ -304,6 +387,16 @@ module Payments
 
         withdrawal.update!(
           status: :cancelled
+        )
+
+        AuditLogs::Record.call(
+          action: "withdrawal.canceled",
+          auditable: withdrawal,
+          user: @user,
+          metadata: {
+            amount: withdrawal.amount,
+            currency: withdrawal.currency.code
+          }
         )
       end
     end

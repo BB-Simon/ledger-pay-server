@@ -32,6 +32,16 @@ module Withdrawals
         )
       end
 
+      AuditLogs::Record.call(
+        action: "withdrawal.created",
+        auditable: withdrawal,
+        user: @user,
+        metadata: {
+          amount: withdrawal.amount,
+          currency: withdrawal.currency.code
+        }
+      )
+
       Withdrawals::CreateProviderWithdrawal.call(withdrawal: withdrawal)
 
       withdrawal.reload

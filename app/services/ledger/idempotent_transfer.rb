@@ -50,6 +50,18 @@ module Ledger
         ledger_transaction: transfer
       )
 
+      AuditLogs::Record.call(
+        action: "transfer.completed",
+        auditable: transfer,
+        user: @user,
+        metadata: {
+          amount: @amount,
+          currency: @from_wallet.currency.code,
+          from_wallet_id: @from_wallet.id,
+          to_wallet_id: @to_wallet.id
+        }
+      )
+
       transfer
     end
 

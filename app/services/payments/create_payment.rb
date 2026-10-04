@@ -34,6 +34,17 @@ module Payments
         status: :pending
       )
 
+      AuditLogs::Record.call(
+        action: "payment.created",
+        auditable: payment,
+        user: @user,
+        metadata: {
+          amount: payment.amount,
+          currency: payment.currency.code,
+          provider: payment.provider
+        }
+      )
+
       intent = Stripe::PaymentIntent.create(
         amount: @amount,
         currency: @wallet.currency.code.downcase,
