@@ -29,6 +29,12 @@ module Payments
           process_refund_updated!
         when "refund.failed"
           process_refund_failed!
+        when "payout.paid"
+          process_withdrawal_paid!
+        when "payout.failed"
+          process_withdrawal_failed!
+        when "payout.canceled"
+          process_withdrawal_cancelled!
 
         else
           Rails.logger.info "Ignore unsupported event #{@event.type}"
@@ -228,6 +234,97 @@ module Payments
           status: :canceled
         )
       end
+    end
+
+    def process_withdrawal_paid!
+      payout = @event.data.object
+
+      withdrawal = find_withdrawal_from_payout!(payout)
+
+      Rails.logger.info "Withdrawal: #{withdrawal.provider_withdrawal_id} - Payout: #{payout.id}"
+
+      validate_withdrawal!(withdrawal, payout)
+
+      Withdrawal.transaction do
+        withdrawal = Withdrawal.lock.find(withdrawal.id)
+
+        return if withdrawal.succeeded?
+
+        return if withdrawal.failed? || withdrawal.canceled?
+
+        withdrawal.update!(
+          status: :succeeded
+        )
+
+        Ledger::Withdraw.call(
+          withdrawal: withdrawal
+        )
+      end
+    end
+
+    def process_withdrawal_failed!
+      payout = @event.data.object
+
+      withdrawal = find_withdrawal_from_payout!(payout)
+
+      validate_withdrawal!(withdrawal, payout)
+
+      Withdrawal.transaction do
+        withdrawal = Withdrawal.lock.find(withdrawal.id)
+
+        return if withdrawal.succeeded? ||
+                  withdrawal.failed? ||
+                  withdrawal.canceled?
+
+        withdrawal.update!(
+          status: :failed,
+          failure_code: payout.failure_code,
+          failure_message: payout.failure_message
+        )
+      end
+    end
+
+    def process_withdrawal_cancelled!
+      payout = @event.data.object
+
+      withdrawal = find_withdrawal_from_payout!(payout)
+
+      validate_withdrawal!(withdrawal, payout)
+
+      Withdrawal.transaction do
+        withdrawal = Withdrawal.lock.find(withdrawal.id)
+
+        return if withdrawal.succeeded? ||
+                  withdrawal.failed? ||
+                  withdrawal.canceled?
+
+        withdrawal.update!(
+          status: :cancelled
+        )
+      end
+    end
+
+    def find_withdrawal_from_payout!(payout)
+      withdrawal_id = payout.metadata["withdrawal_id"]
+
+      raise ArgumentError, "Withdrawal ID missing from Stripe metadata" if
+        withdrawal_id.blank?
+
+      Withdrawal.find(withdrawal_id)
+    end
+
+    def validate_withdrawal!(withdrawal, payout)
+      raise ArgumentError, "Withdrawal provider mismatch" unless
+        withdrawal.provider == "stripe"
+
+      raise ArgumentError, "Stripe payout ID mismatch" unless
+        withdrawal.provider_withdrawal_id == payout.id
+
+      raise ArgumentError, "Withdrawal amount mismatch" unless
+        withdrawal.amount == payout.amount
+
+      raise ArgumentError, "Withdrawal currency mismatch" unless
+        withdrawal.currency.code.downcase == payout.currency
     end
   end
 end
