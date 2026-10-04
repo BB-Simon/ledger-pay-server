@@ -25,6 +25,17 @@ module Payments
         )
       end
 
+      AuditLogs::Record.call(
+        action: "refund.created",
+        auditable: refund,
+        user: refund.payment.user,
+        metadata: {
+          amount: refund.amount,
+          currency: refund.payment.currency.code,
+          payment_id: refund.payment_id
+        }
+      )
+
       stripe_refund = Stripe::Refund.create(
         payment_intent: @payment.provider_payment_id,
         amount: refund.amount,
