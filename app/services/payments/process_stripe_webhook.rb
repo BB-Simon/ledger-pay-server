@@ -272,9 +272,13 @@ module Payments
       Withdrawal.transaction do
         withdrawal = Withdrawal.lock.find(withdrawal.id)
 
-        return if withdrawal.succeeded? ||
-                  withdrawal.failed? ||
-                  withdrawal.canceled?
+        return if withdrawal.failed? || withdrawal.canceled?
+
+        if withdrawal.succeeded?
+          Ledger::ReverseWithdrawal.call(
+            withdrawal: withdrawal
+          )
+        end
 
         withdrawal.update!(
           status: :failed,

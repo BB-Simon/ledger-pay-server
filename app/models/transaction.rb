@@ -9,7 +9,8 @@ class Transaction < ApplicationRecord
     withdrawal: "withdrawal",
     transfer: "transfer",
     refund: "refund",
-    fee: "fee"
+    fee: "fee",
+    reversal: "reversal"
   }
 
   enum :status, {
