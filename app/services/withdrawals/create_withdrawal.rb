@@ -32,7 +32,9 @@ module Withdrawals
         )
       end
 
-      withdrawal
+      Withdrawals::CreateProviderWithdrawal.call(withdrawal: withdrawal)
+
+      withdrawal.reload
     end
 
     private

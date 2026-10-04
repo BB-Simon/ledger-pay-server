@@ -7,7 +7,7 @@ class Withdrawal < ApplicationRecord
     pending: "pending",
     succeeded: "succeeded",
     failed: "failed",
-    cancelled: "canceled"
+    canceled: "canceled"
   }
 
   validates :amount,
