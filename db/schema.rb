@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_04_212119) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_04_221839) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -115,6 +115,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_04_212119) do
     t.index ["provider", "provider_payment_id"], name: "index_payments_on_provider_and_provider_payment_id", unique: true
     t.index ["user_id"], name: "index_payments_on_user_id"
     t.index ["wallet_id"], name: "index_payments_on_wallet_id"
+  end
+
+  create_table "reconciliation_records", force: :cascade do |t|
+    t.bigint "actual_amount"
+    t.datetime "created_at", null: false
+    t.string "currency"
+    t.jsonb "details"
+    t.string "discrepancy_type"
+    t.bigint "expected_amount"
+    t.bigint "internal_id"
+    t.string "internal_type"
+    t.string "provider"
+    t.string "provider_reference"
+    t.string "record_type"
+    t.string "status"
+    t.datetime "updated_at", null: false
+    t.index ["discrepancy_type"], name: "index_reconciliation_records_on_discrepancy_type"
+    t.index ["internal_type", "internal_id"], name: "index_reconciliation_records_on_internal_type_and_internal_id"
+    t.index ["provider", "provider_reference"], name: "idx_on_provider_provider_reference_78d0571d5c", unique: true
+    t.index ["status"], name: "index_reconciliation_records_on_status"
   end
 
   create_table "refunds", force: :cascade do |t|
