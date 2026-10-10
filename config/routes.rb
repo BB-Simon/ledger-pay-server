@@ -11,6 +11,11 @@ Rails.application.routes.draw do
         post "stripe", to: "stripe#create"
       end
 
+      namespace :admin do
+        resources :reconciliation_records, only: [ :index, :show ]
+      end
+
+
       get "me", to: "me#show"
       get "kyc", to: "kyc#show"
       post "transfers", to: "transfers#create"
