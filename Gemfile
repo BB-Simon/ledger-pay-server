@@ -38,6 +38,12 @@ gem "bcrypt"
 # Stripe payment processing [https://stripe.com/docs]
 gem "stripe"
 
+# Background job processing [https://github.com/mperham/sidekiq]
+gem "sidekiq"
+
+# Sidekiq cron jobs [https://github.com/ondrejbartas/sidekiq-cron]
+gem "sidekiq-cron"
+
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin Ajax possible
 # gem "rack-cors"
 

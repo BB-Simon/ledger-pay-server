@@ -12,12 +12,7 @@ module Reconciliation
       discrepancy_type: nil,
       details: {}
     )
-    record = ReconciliationRecord.find_or_initialize_by(
-      provider: provider,
-      provider_reference: provider_reference
-    )
-
-    record.assign_attributes(
+    attributes = {
       record_type: record_type,
       internal_type: internal&.class&.name,
       internal_id: internal&.id,
@@ -27,12 +22,18 @@ module Reconciliation
       status: status,
       discrepancy_type: discrepancy_type,
       details: details
-    )
+    }
 
-    record.save!
+    record = ReconciliationRecord.create_or_find_by!(
+      provider: provider,
+      provider_reference: provider_reference
+    ) do |new_record|
+      new_record.assign_attributes(attributes)
+    end
+
+    record.update!(attributes)
 
     record
-
 
       # ReconciliationRecord.create!(
       #   provider: provider,
