@@ -20,9 +20,9 @@ class User < ApplicationRecord
     finance_officer: "finance_officer",
     support_agent: "support_agent",
     system: "system"
-  }
+  }, default: :customer
 
-  validates :email, presence: true, uniqueness:
+  validates :email, presence: true, uniqueness: true
 
 
   private
