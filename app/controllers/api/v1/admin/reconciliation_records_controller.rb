@@ -3,6 +3,7 @@ module Api
     module Admin
       class ReconciliationRecordsController < ApplicationController
         before_action :authenticate_user!
+        before_action :require_admin!
 
         def index
           records = ReconciliationRecord
