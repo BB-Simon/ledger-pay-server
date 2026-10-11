@@ -13,7 +13,17 @@ class User < ApplicationRecord
 
   before_validation :normalize_email
 
-  validates :email, presence: true, uniqueness: true
+  enum :role, {
+    customer: "customer",
+    admin: "admin",
+    compliance_officer: "compliance_officer",
+    finance_officer: "finance_officer",
+    support_agent: "support_agent",
+    system: "system"
+  }
+
+  validates :email, presence: true, uniqueness:
+
 
   private
   def normalize_email
