@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_10_234953) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_11_163437) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -129,11 +129,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_10_234953) do
     t.string "provider"
     t.string "provider_reference"
     t.string "record_type"
+    t.text "resolution_notes"
+    t.string "resolution_status", default: "open", null: false
+    t.datetime "resolved_at"
+    t.bigint "resolved_by_id"
     t.string "status"
     t.datetime "updated_at", null: false
     t.index ["discrepancy_type"], name: "index_reconciliation_records_on_discrepancy_type"
     t.index ["internal_type", "internal_id"], name: "index_reconciliation_records_on_internal_type_and_internal_id"
     t.index ["provider", "provider_reference"], name: "idx_on_provider_provider_reference_78d0571d5c", unique: true
+    t.index ["resolved_by_id"], name: "index_reconciliation_records_on_resolved_by_id"
     t.index ["status"], name: "index_reconciliation_records_on_status"
   end
 
@@ -227,6 +232,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_10_234953) do
   add_foreign_key "payments", "currencies"
   add_foreign_key "payments", "users"
   add_foreign_key "payments", "wallets"
+  add_foreign_key "reconciliation_records", "users", column: "resolved_by_id"
   add_foreign_key "refunds", "payments"
   add_foreign_key "transactions", "currencies"
   add_foreign_key "wallets", "currencies"

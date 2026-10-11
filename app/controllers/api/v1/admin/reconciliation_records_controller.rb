@@ -28,6 +28,21 @@ module Api
           render json: reconciliation_json(record)
         end
 
+        def resolve
+          record = ReconciliationRecord.find(params[:id])
+
+          record = Reconciliation::ResolveRecord.call(
+            record: record,
+            admin: current_user,
+            notes: params[:resolution_notes]
+          )
+
+          render json: reconciliation_json(record)
+        rescue ArgumentError => e
+          render json: { error: e.message },
+            status: :unprocessable_entity
+        end
+
         private
 
         def reconciliation_json(record)

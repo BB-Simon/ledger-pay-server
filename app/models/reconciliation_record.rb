@@ -1,4 +1,13 @@
 class ReconciliationRecord < ApplicationRecord
+  belongs_to :resolved_by,
+    class_name: "User",
+    optional: true
+
+  enum :resolution_status, {
+    open: "open",
+    resolved: "resolved"
+  }, default: :open
+
   enum :status, {
     matched: "matched",
     discrepancy: "discrepancy",
