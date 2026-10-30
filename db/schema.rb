@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_11_163437) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_165417) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -142,6 +142,61 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_163437) do
     t.index ["status"], name: "index_reconciliation_records_on_status"
   end
 
+  create_table "reconciliation_results", force: :cascade do |t|
+    t.bigint "actual_amount"
+    t.datetime "created_at", null: false
+    t.string "currency"
+    t.jsonb "details"
+    t.string "discrepancy_type"
+    t.bigint "expected_amount"
+    t.string "provider_reference"
+    t.bigint "reconciliation_record_id"
+    t.bigint "reconciliation_run_id", null: false
+    t.string "record_type"
+    t.string "status"
+    t.datetime "updated_at", null: false
+    t.index ["reconciliation_record_id"], name: "index_reconciliation_results_on_reconciliation_record_id"
+    t.index ["reconciliation_run_id", "provider_reference"], name: "idx_reconciliation_results_run_reference", unique: true
+    t.index ["reconciliation_run_id"], name: "index_reconciliation_results_on_reconciliation_run_id"
+  end
+
+  create_table "reconciliation_run_items", force: :cascade do |t|
+    t.integer "attempts", default: 0, null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.string "error_class"
+    t.text "error_message"
+    t.bigint "internal_id"
+    t.string "internal_type", null: false
+    t.string "provider_reference"
+    t.bigint "reconciliation_run_id", null: false
+    t.string "record_type", null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["reconciliation_run_id", "record_type", "internal_type", "internal_id"], name: "idx_reconciliation_run_items_unique_item", unique: true
+    t.index ["reconciliation_run_id"], name: "index_reconciliation_run_items_on_reconciliation_run_id"
+    t.index ["status"], name: "index_reconciliation_run_items_on_status"
+  end
+
+  create_table "reconciliation_runs", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.integer "discrepancy_count", default: 0, null: false
+    t.text "error_message"
+    t.integer "failed_count", default: 0, null: false
+    t.integer "matched_count", default: 0, null: false
+    t.string "provider", null: false
+    t.integer "records_checked", default: 0, null: false
+    t.string "run_type", null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.integer "total_items", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider", "created_at"], name: "index_reconciliation_runs_on_provider_and_created_at"
+    t.index ["status"], name: "index_reconciliation_runs_on_status"
+  end
+
   create_table "refunds", force: :cascade do |t|
     t.bigint "amount", null: false
     t.datetime "created_at", null: false
@@ -233,6 +288,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_163437) do
   add_foreign_key "payments", "users"
   add_foreign_key "payments", "wallets"
   add_foreign_key "reconciliation_records", "users", column: "resolved_by_id"
+  add_foreign_key "reconciliation_results", "reconciliation_records"
+  add_foreign_key "reconciliation_results", "reconciliation_runs"
+  add_foreign_key "reconciliation_run_items", "reconciliation_runs"
   add_foreign_key "refunds", "payments"
   add_foreign_key "transactions", "currencies"
   add_foreign_key "wallets", "currencies"

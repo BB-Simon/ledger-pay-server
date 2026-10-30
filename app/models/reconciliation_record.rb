@@ -3,6 +3,9 @@ class ReconciliationRecord < ApplicationRecord
     class_name: "User",
     optional: true
 
+  has_many :reconciliation_results,
+    dependent: :restrict_with_error
+
   enum :resolution_status, {
     open: "open",
     resolved: "resolved"

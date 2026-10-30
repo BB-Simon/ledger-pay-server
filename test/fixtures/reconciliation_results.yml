@@ -1,0 +1,25 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  reconciliation_run: one
+  reconciliation_record: one
+  provider_reference: MyString
+  record_type: MyString
+  status: MyString
+  discrepancy_type: MyString
+  expected_amount: 
+  actual_amount: 
+  currency: MyString
+  details: 
+
+two:
+  reconciliation_run: two
+  reconciliation_record: two
+  provider_reference: MyString
+  record_type: MyString
+  status: MyString
+  discrepancy_type: MyString
+  expected_amount: 
+  actual_amount: 
+  currency: MyString
+  details: 
