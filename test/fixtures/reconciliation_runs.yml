@@ -1,0 +1,23 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  provider: MyString
+  run_type: MyString
+  status: MyString
+  started_at: 2026-10-11 19:49:11
+  completed_at: 2026-10-11 19:49:11
+  records_checked: 1
+  matched_count: 1
+  discrepancy_count: 1
+  error_message: MyText
+
+two:
+  provider: MyString
+  run_type: MyString
+  status: MyString
+  started_at: 2026-10-11 19:49:11
+  completed_at: 2026-10-11 19:49:11
+  records_checked: 1
+  matched_count: 1
+  discrepancy_count: 1
+  error_message: MyText

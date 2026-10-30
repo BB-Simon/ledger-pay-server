@@ -13,9 +13,14 @@ Sidekiq.configure_server do |config|
         "class" => "Reconciliation::RefundsJob",
         "queue" => "default"
       },
-      "reconciliation_withdrawals" => {
+      "reconciliation_payouts" => {
         "cron" => "*/10 * * * *",
         "class" => "Reconciliation::PayoutsJob",
+        "queue" => "default"
+      },
+      "reconciliation_recover_stuck_items" => {
+        "cron" => "*/30 * * * *",
+        "class" => "Reconciliation::RecoverStuckItemsJob",
         "queue" => "default"
       }
     )

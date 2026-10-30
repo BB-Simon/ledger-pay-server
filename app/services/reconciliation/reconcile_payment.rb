@@ -45,7 +45,7 @@ module Reconciliation
     end
 
     def create_missing_internal_record
-      ReconciliationRecord.create!(
+      Reconciliation::CreateRecord.call(
         provider: "stripe",
         provider_reference: @payment_intent.id,
         record_type: "payment",
@@ -60,13 +60,11 @@ module Reconciliation
     end
 
     def create_matched_record(payment)
-      ReconciliationRecord.create!(
+      Reconciliation::CreateRecord.call(
         provider: "stripe",
         provider_reference: @payment_intent.id,
         record_type: "payment",
-        internal_type: "Payment",
-        internal_id: payment.id,
-        expected_amount: payment.amount,
+        internal: payment,
         actual_amount: @payment_intent.amount,
         currency: @payment_intent.currency,
         status: :matched,
@@ -78,12 +76,11 @@ module Reconciliation
     end
 
     def create_discrepancy_record(payment:, discrepancies:)
-      ReconciliationRecord.create!(
+      Reconciliation::CreateRecord.call(
         provider: "stripe",
         provider_reference: @payment_intent.id,
         record_type: "payment",
-        internal_type: "Payment",
-        internal_id: payment.id,
+        internal: payment,
         expected_amount: payment.amount,
         actual_amount: @payment_intent.amount,
         currency: @payment_intent.currency,

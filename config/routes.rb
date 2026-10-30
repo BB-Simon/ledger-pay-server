@@ -14,6 +14,12 @@ Rails.application.routes.draw do
       namespace :admin do
         resources :reconciliation_records, only: [ :index, :show ]
         post "reconciliation_records/:id/resolve", to: "reconciliation_records#resolve"
+        resources :reconciliation_runs, only: %i[index show] do
+          post "items/:item_id/retry",
+            to: "reconciliation_runs#retry_item",
+            on: :member,
+            as: :retry_item
+        end
       end
 
 
