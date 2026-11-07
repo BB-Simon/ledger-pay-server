@@ -14,6 +14,12 @@ module Payments
       refund = Payment.transaction do
         @payment = Payment.lock.find(@payment.id)
 
+        raise ArgumentError, "Wallet account is required" unless @payment.wallet.account
+
+        # Same row Ledger::Transfer and CreateWithdrawal lock, so the balance
+        # can't change between this check and the refund being held.
+        @payment.wallet.account.lock!
+
         validate!
 
         Refund.create!(
@@ -36,20 +42,21 @@ module Payments
         }
       )
 
-      stripe_refund = Stripe::Refund.create(
-        payment_intent: @payment.provider_payment_id,
-        amount: refund.amount,
-        metadata: {
-          refund_id: refund.id
-        }
-      )
+      submit_to_stripe(refund)
 
-      refund.update!(provider_refund_id: stripe_refund.id)
+      { refund: refund.reload }
+    end
 
-      {
-        refund: refund,
-        stripe_refund: stripe_refund
-      }
+    # A definite Stripe rejection raises (the refund is already marked failed)
+    # and the controller returns 422. An unknown outcome keeps the refund
+    # pending and retries in the background with the same idempotency key.
+    def submit_to_stripe(refund)
+      Payments::SubmitRefund.call(refund: refund)
+    rescue *Payments::SubmitRefund::PERMANENT_ERRORS
+      raise
+    rescue Stripe::StripeError => e
+      Rails.logger.warn("Refund #{refund.id} submission outcome unknown, retrying: #{e.class}: #{e.message}")
+      Payments::SubmitRefundJob.perform_async(refund.id)
     end
 
     private
@@ -68,6 +75,11 @@ module Payments
 
       raise ArgumentError, "Refund amount exceeds refundable amount" unless
         @amount <= refundable_amount
+
+      # The refund is debited from the wallet when Stripe settles it, so the
+      # wallet must still hold the money now.
+      raise ArgumentError, "Insufficient wallet balance for refund" unless
+        @payment.wallet.available_balance >= @amount
     end
 
     def refundable_amount

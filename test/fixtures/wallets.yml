@@ -1,9 +1,9 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+alice_usd:
+  user: alice
+  currency: usd
+  status: active
 
-one:
-  user: one
-  status: MyString
-
-two:
-  user: two
-  status: MyString
+bob_usd:
+  user: bob
+  currency: usd
+  status: active

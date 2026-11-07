@@ -18,7 +18,12 @@ module Withdrawals
       validate!
 
       withdrawal = Wallet.transaction do
-        wallet = Wallet.lock.find(@wallet.id)
+        wallet = Wallet.find(@wallet.id)
+        raise ArgumentError, "Wallet account is required" unless wallet.account
+
+        # Lock the wallet's ledger account, the same row Ledger::Transfer locks,
+        # so withdrawals and transfers from one wallet run one at a time.
+        wallet.account.lock!
 
         validate_wallet_balance!(wallet)
 
@@ -42,9 +47,21 @@ module Withdrawals
         }
       )
 
-      Withdrawals::CreateProviderWithdrawal.call(withdrawal: withdrawal)
+      submit_to_stripe(withdrawal)
 
       withdrawal.reload
+    end
+
+    # A definite Stripe rejection raises (the withdrawal is already marked
+    # failed) and the controller returns 422. An unknown outcome keeps the
+    # withdrawal pending and retries in the background with the same key.
+    def submit_to_stripe(withdrawal)
+      Withdrawals::CreateProviderWithdrawal.call(withdrawal: withdrawal)
+    rescue *StripeErrors::DEFINITE_FAILURES
+      raise
+    rescue Stripe::StripeError => e
+      Rails.logger.warn("Withdrawal #{withdrawal.id} submission outcome unknown, retrying: #{e.class}: #{e.message}")
+      Withdrawals::SubmitWithdrawalJob.perform_async(withdrawal.id)
     end
 
     private
