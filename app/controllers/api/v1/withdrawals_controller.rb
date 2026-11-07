@@ -18,6 +18,9 @@ module Api
       rescue ArgumentError => e
         render json: { error: e.message },
           status: :unprocessable_entity
+      rescue Stripe::StripeError => e
+        render json: { error: e.message },
+          status: :unprocessable_entity
       end
 
       def index

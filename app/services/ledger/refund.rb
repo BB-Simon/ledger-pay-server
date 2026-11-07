@@ -8,9 +8,30 @@ module Ledger
       @refund = refund
     end
 
+    # Stripe has already refunded the card, so this always posts, even if the
+    # wallet balance is too low. A shortfall is flagged, not refused.
     def call
       validate!
 
+      Account.transaction do
+        account = @refund.payment.wallet.account
+        account.lock!
+
+        transaction = post_transaction!
+
+        Ledger::FlagNegativeBalance.call(
+          account: account,
+          reference: transaction.reference,
+          user: @refund.payment.user
+        )
+
+        transaction
+      end
+    end
+
+    private
+
+    def post_transaction!
       Ledger::PostTransaction.call(
         reference: "REFUND-#{@refund.id}",
         transaction_type: :refund,
@@ -30,8 +51,6 @@ module Ledger
       )
     end
 
-    private
-
     def validate!
       raise ArgumentError, "Refund must be succeeded" unless
         @refund.succeeded?
@@ -44,9 +63,6 @@ module Ledger
 
       raise ArgumentError, "Wallet account is required" unless
         @refund.payment.wallet.account
-
-      raise ArgumentError, "Insufficient wallet balance" unless
-        @refund.payment.wallet.account.balance >= @refund.amount
     end
 
     def clearing_account

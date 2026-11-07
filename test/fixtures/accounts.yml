@@ -1,15 +1,31 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+# Wallet accounts are liabilities (they grow with credits).
+# Clearing accounts are assets and are looked up by code in the ledger services.
+alice_usd:
+  wallet: alice_usd
+  currency: usd
+  account_type: liability
+  code: WALLET_ALICE_USD
+  name: Alice USD wallet
+  status: active
 
-one:
-  wallet: one
-  currency: one
-  account_type: MyString
-  string: MyString
-  status: MyString
+bob_usd:
+  wallet: bob_usd
+  currency: usd
+  account_type: liability
+  code: WALLET_BOB_USD
+  name: Bob USD wallet
+  status: active
 
-two:
-  wallet: two
-  currency: two
-  account_type: MyString
-  string: MyString
-  status: MyString
+stripe_clearing_usd:
+  currency: usd
+  account_type: asset
+  code: STRIPE_CLEARING_USD
+  name: Stripe clearing USD
+  status: active
+
+withdrawal_clearing_usd:
+  currency: usd
+  account_type: asset
+  code: WITHDRAWAL_CLEARING_USD
+  name: Withdrawal clearing USD
+  status: active

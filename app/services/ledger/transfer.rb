@@ -74,8 +74,10 @@ module Ledger
       end
     end
 
+    # Runs after the accounts are locked. Uses available_balance so money held
+    # by pending withdrawals can't be transferred away.
     def validate_blance!
-      if @from_wallet.account.balance < @amount
+      if @from_wallet.available_balance < @amount
         raise ArgumentError, "Insufficient balance in source wallet"
       end
     end

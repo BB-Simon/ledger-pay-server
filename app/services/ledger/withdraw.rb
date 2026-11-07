@@ -8,9 +8,30 @@ module Ledger
       @withdrawal = withdrawal
     end
 
+    # The payout has already been paid by Stripe, so this always posts, even
+    # if the wallet balance is too low. A shortfall is flagged, not refused.
     def call
       validate!
 
+      Account.transaction do
+        account = @withdrawal.wallet.account
+        account.lock!
+
+        transaction = post_transaction!
+
+        Ledger::FlagNegativeBalance.call(
+          account: account,
+          reference: transaction.reference,
+          user: @withdrawal.user
+        )
+
+        transaction
+      end
+    end
+
+    private
+
+    def post_transaction!
       Ledger::PostTransaction.call(
         reference: "WITHDRAWAL-#{@withdrawal.id}",
         transaction_type: :withdrawal,
@@ -30,8 +51,6 @@ module Ledger
       )
     end
 
-    private
-
     def validate!
       raise ArgumentError, "Withdrawal must be succeeded" unless
         @withdrawal.succeeded?
@@ -44,9 +63,6 @@ module Ledger
 
       raise ArgumentError, "Currency mismatch" unless
         @withdrawal.wallet.currency_id == @withdrawal.currency_id
-
-      raise ArgumentError, "Insufficient wallet balance" unless
-        @withdrawal.wallet.account.balance >= @withdrawal.amount
     end
 
     def clearing_account

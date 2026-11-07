@@ -36,7 +36,7 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 - `Wallet` (user-facing) has one `Account`. `Account` has many `LedgerEntry`, and those entries are grouped under a `Transaction` via FK `ledger_transaction_id`. Don't confuse the `Transaction` model with `ActiveRecord` `.transaction` blocks.
 - `Ledger::PostTransaction` is the **only** place that writes ledger entries. It enforces at least 2 entries, positive integer amounts, active accounts, a single currency, and debits == credits. All other ledger services (`Deposit`, `Transfer`, `Withdraw`, `Refund`, `ReverseWithdrawal`) build entry lists and delegate to it.
 - Amounts are **integers in minor units** (cents). Balances are derived, not stored: `Account#balance` sums entries according to account type (asset/expense increase with debits). `Wallet#available_balance` subtracts pending withdrawals.
-- External money flows go through system clearing accounts that are looked up by code: `STRIPE_CLEARING_<CUR>` and `WITHDRAWAL_CLEARING_<CUR>`. These must exist in the DB because `db/seeds.rb` doesn't create them. `Deposit` upcases the currency code but the other services don't, so watch for case mismatches.
+- External money flows go through system clearing accounts that are looked up by code: `STRIPE_CLEARING_<CUR>` and `WITHDRAWAL_CLEARING_<CUR>`. These must exist in the DB because `db/seeds.rb` doesn't create them. `Currency#normalize_code` stores codes in upper case, so the codes are always `..._USD`.
 - `Transfer` takes row locks on both accounts in id order to avoid deadlocks. `IdempotentTransfer` wraps it using `IdempotencyKey` (unique per user + key, with a request-hash check) from the `Idempotency-Key` header.
 - Significant state changes call `AuditLogs::Record.call(action:, auditable:, user:, metadata:)`.
 
@@ -59,9 +59,7 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 
 - Test coverage is mostly empty model-test stubs plus one empty admin controller test, so most behavior is untested.
 - GitHub CI (`.github/workflows/ci.yml`) runs brakeman, bundler-audit, rubocop, and `bin/rails db:test:prepare test`. It triggers on PRs and on pushes to `master`, while the default branch is `main`.
-- Known bugs (not fixed yet; don't copy these patterns):
-  - `Auth::SessionsController#create` renders 401 on bad credentials but doesn't `return`, so execution continues.
-  - In `Payments::ProcessStripeWebhook`: `process_refund_failed!` is called with an argument it doesn't accept; payout cancel sets `:cancelled` but the enum is `canceled`; and withdrawal audit logs pass `@user`, which is never set.
+- Known bugs are listed in `docs/BUGS.md`, with severity and a fix for each. Don't copy those patterns, and check that file before changing the affected code.
 
 Project rules (workflow, money/ledger invariants, API, auth, jobs, testing) are in AGENTS.md:
 
