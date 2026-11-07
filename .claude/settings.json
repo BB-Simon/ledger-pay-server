@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bundle exec rspec:*)",
+      "Bash(bin/rails test:*)",
+      "Bash(bundle exec rubocop:*)",
+      "Bash(bin/rails routes:*)",
+      "Bash(bin/rails db:migrate)",
+      "Bash(bin/rails generate:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)"
+    ],
+    "deny": [
+      "Read(./.env*)",
+      "Read(./config/master.key)",
+      "Read(./config/credentials/*.key)",
+      "Bash(bin/rails db:drop:*)",
+      "Bash(git push:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path'); [[ \"$f\" == *.rb ]] && bundle exec rubocop -a \"$f\" || true"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -64,3 +64,5 @@ group :development, :test do
 end
 
 gem "fiddle", "~> 1.1"
+
+gem "ruby-jq", require: "jq"

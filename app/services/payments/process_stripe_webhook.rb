@@ -386,7 +386,7 @@ module Payments
                   withdrawal.canceled?
 
         withdrawal.update!(
-          status: :cancelled
+          status: :canceled
         )
 
         AuditLogs::Record.call(
