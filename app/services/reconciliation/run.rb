@@ -3,6 +3,14 @@ module Reconciliation
   class Run
     RUN_TYPES = %w[payments refunds payouts].freeze
 
+    # Records with a Stripe id: created recently, or still pending at any age
+    # (a lost webhook would otherwise never be noticed once it's a day old).
+    # Records without a Stripe id: still pending after UNSUBMITTED_AFTER,
+    # which is longer than the submission retry jobs keep trying. They're
+    # reported as missing_provider_record.
+    RECENT_WINDOW = 24.hours
+    UNSUBMITTED_AFTER = 6.hours
+
     def self.call(provider: "stripe", run_type:)
       new(provider: provider, run_type: run_type).call
     end
@@ -72,28 +80,36 @@ module Reconciliation
     private
 
     def candidate_records
-      cutoff = 24.hours.ago
+      table = base_scope.table_name
+      no_provider_id = { table => { provider_id_column => [ nil, "" ] } }
 
+      submitted = base_scope.where.not(no_provider_id)
+      unsubmitted = base_scope.where(no_provider_id)
+
+      submitted.where(table => { created_at: RECENT_WINDOW.ago.. })
+        .or(submitted.where(table => { status: "pending" }))
+        .or(unsubmitted.where(table => { status: "pending", created_at: ...UNSUBMITTED_AFTER.ago }))
+        .to_a
+    end
+
+    def base_scope
       case @run_type
       when "payments"
         Payment.where(provider: @provider)
-          .where(created_at: cutoff..)
-          .where.not(provider_payment_id: [ nil, "" ])
-          .to_a
-
       when "refunds"
         Refund.joins(:payment)
-          .where(payments: { provider: @provider })
-          .where(refunds: { created_at: cutoff.. })
-          .where.not(provider_refund_id: [ nil, "" ])
-          .to_a
-
+          .where(payments: { provider: @provider }, refunds: { provider: @provider })
       when "payouts"
         Withdrawal.where(provider: @provider)
-          .where(created_at: cutoff..)
-          .where.not(provider_withdrawal_id: [ nil, "" ])
-          .to_a
       end
+    end
+
+    def provider_id_column
+      {
+        "payments" => :provider_payment_id,
+        "refunds" => :provider_refund_id,
+        "payouts" => :provider_withdrawal_id
+      }.fetch(@run_type)
     end
 
     def item_record_type
@@ -105,11 +121,7 @@ module Reconciliation
     end
 
     def provider_reference_for(record)
-      case @run_type
-      when "payments" then record.provider_payment_id
-      when "refunds" then record.provider_refund_id
-      when "payouts" then record.provider_withdrawal_id
-      end
+      record.public_send(provider_id_column)
     end
 
     def job_class

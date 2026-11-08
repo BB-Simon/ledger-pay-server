@@ -1,5 +1,14 @@
 module Reconciliation
   class ReconcilePayout
+    # Local statuses that agree with each Stripe payout status. Any status not
+    # listed (pending, in_transit) is still in progress at Stripe.
+    EXPECTED_STATUSES = {
+      "paid" => %w[succeeded],
+      "failed" => %w[failed],
+      "canceled" => %w[canceled]
+    }.freeze
+    IN_PROGRESS_STATUSES = %w[pending].freeze
+
     def self.call(stripe_payout:)
       new(stripe_payout: stripe_payout).call
     end
@@ -35,6 +44,9 @@ module Reconciliation
       if withdrawal.currency.code.downcase != @stripe_payout.currency
         discrepancies << :currency_mismatch
       end
+
+      expected = EXPECTED_STATUSES.fetch(@stripe_payout.status, IN_PROGRESS_STATUSES)
+      discrepancies << :status_mismatch unless expected.include?(withdrawal.status)
 
       if discrepancies.empty?
         Reconciliation::CreateRecord.call(

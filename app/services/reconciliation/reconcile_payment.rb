@@ -1,5 +1,15 @@
 module Reconciliation
   class ReconcilePayment
+    # Local statuses that agree with each PaymentIntent status. After a failed
+    # attempt Stripe goes back to requires_payment_method, which we record as
+    # failed. Any status not listed is still in progress at Stripe.
+    EXPECTED_STATUSES = {
+      "succeeded" => %w[succeeded],
+      "canceled" => %w[canceled],
+      "requires_payment_method" => %w[pending failed]
+    }.freeze
+    IN_PROGRESS_STATUSES = %w[pending].freeze
+
     def self.call(payment_intent:)
       new(payment_intent: payment_intent).call
     end
@@ -24,6 +34,9 @@ module Reconciliation
       if payment.currency.code.downcase != @payment_intent.currency
         discrepancies << "currency_mismatch"
       end
+
+      expected = EXPECTED_STATUSES.fetch(@payment_intent.status, IN_PROGRESS_STATUSES)
+      discrepancies << "status_mismatch" unless expected.include?(payment.status)
 
       if discrepancies.empty?
         create_matched_record(payment)
