@@ -119,12 +119,12 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
   end
   ```
 
-### H6. A transfer without an `Idempotency-Key` header returns 500
+### H6. A transfer without an `Idempotency-Key` header returns 500 — FIXED (test: `test/controllers/api/v1/transfers_controller_test.rb`)
 - **Where:** `app/controllers/api/v1/transfers_controller.rb`
 - **What happens:** the key is `nil`, so `IdempotencyKey.create!` raises `RecordInvalid` ("Key can't be blank"), which isn't rescued.
 - **Fix:** check the header in the controller: `return render json: { error: "Idempotency-Key header is required" }, status: :unprocessable_entity if key.blank?`.
 
-### H7. The admin "retry run item" endpoint always returns 404
+### H7. The admin "retry run item" endpoint always returns 404 — FIXED (test: `test/controllers/api/v1/admin/reconciliation_runs_controller_test.rb`)
 - **Where:** `app/controllers/api/v1/admin/reconciliation_runs_controller.rb`, `set_item`
 - **What happens:** the route is `/reconciliation_runs/:id/items/:item_id/retry`, so `params[:id]` is the **run** id and `params[:run_id]` doesn't exist. `find_by!(id: params[:id], reconciliation_run_id: nil)` never matches.
 - **Fix:** `ReconciliationRunItem.find_by!(id: params[:item_id], reconciliation_run_id: params[:id])`.

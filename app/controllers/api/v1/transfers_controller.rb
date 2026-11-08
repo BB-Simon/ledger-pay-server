@@ -4,16 +4,24 @@ module Api
         before_action :authenticate_user!
 
         def create
-          from_wallet = current_user.wallets.find(params[:from_wallet_id])
-          to_wallet = Wallet.find(params[:to_wallet_id])
+          idempotency_key = request.headers["Idempotency-Key"].to_s.strip
 
+          if idempotency_key.blank?
+            return render json: {
+              error: "Idempotency-Key header is required"
+            }, status: :unprocessable_entity
+          end
+
+          from_wallet = current_user.wallets.find(params[:from_wallet_id])
+          # Unscoped on purpose: the recipient is another customer's wallet.
+          to_wallet = Wallet.find(params[:to_wallet_id])
 
           transaction = Ledger::IdempotentTransfer.call(
             user: current_user,
             from_wallet: from_wallet,
             to_wallet: to_wallet,
             amount: params[:amount].to_i,
-            idempotency_key: request.headers["idempotency-key"]
+            idempotency_key: idempotency_key
           )
 
           render json: {
