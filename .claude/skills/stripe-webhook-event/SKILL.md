@@ -11,7 +11,7 @@ Entry point: `POST /api/v1/webhooks/stripe` → `Api::V1::Webhooks::StripeContro
 3. dispatches on `@event.type` in the `case` statement
 4. marks the event `processed`
 
-`Payments::ProcessStripeRefundWebhook` is unused, so don't add handlers there.
+All refund events are handled in `Payments::ProcessStripeWebhook`.
 
 ## 1. Add the handler
 Add a `when "<event.type>"` branch and a private `process_<thing>_<event>!` method. Handler template:

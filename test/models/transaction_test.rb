@@ -9,7 +9,7 @@ class TransactionTest < ActiveSupport::TestCase
 
   test "a posted transaction can't be updated" do
     assert_raises(ActiveRecord::ReadOnlyRecord) { @transaction.update!(reference: "EDITED") }
-    assert_raises(ActiveRecord::ReadOnlyRecord) { @transaction.update!(status: :reversed) }
+    assert_raises(ActiveRecord::ReadOnlyRecord) { @transaction.update!(status: :failed) }
 
     assert_equal "TEST-FUND-ALICE", Transaction.find(@transaction.id).reference
   end

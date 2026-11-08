@@ -58,7 +58,7 @@ module Ledger
 
     def clearing_account
       Account.find_by!(
-        code: "STRIPE_CLEARING_#{@wallet.currency.code.upcase}"
+        code: "STRIPE_CLEARING_#{@wallet.currency.code}"
       )
     end
   end

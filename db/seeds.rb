@@ -5,6 +5,10 @@
 # Payments, refunds and withdrawals look up the clearing accounts by code
 # (STRIPE_CLEARING_<CUR>, WITHDRAWAL_CLEARING_<CUR>) and fail without them.
 # Wallets and their accounts are opened per user by Wallets::Open.
+#
+# Both clearing accounts are assets. WITHDRAWAL_CLEARING is credited on each
+# payout, so its balance is negative: minus the total paid out, net of
+# reversals. That's expected (BUGS.md L6).
 
 currencies = [
   { code: "USD", name: "US Dollar", decimal_places: 2 }

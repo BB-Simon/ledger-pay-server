@@ -18,8 +18,7 @@ class Transaction < ApplicationRecord
   enum :status, {
     pending: "pending",
     posted: "posted",
-    failed: "failed",
-    reversed: "reversed"
+    failed: "failed"
   }
 
   validates :reference, presence: true, uniqueness: true

@@ -7,7 +7,7 @@ class User < ApplicationRecord
 
   has_many :payments, dependent: :restrict_with_error
 
-  has_many :idempotency_key, dependent: :restrict_with_error
+  has_many :idempotency_keys, dependent: :restrict_with_error
 
   has_many :withdrawals, dependent: :restrict_with_error
 

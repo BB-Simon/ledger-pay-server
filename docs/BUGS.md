@@ -232,13 +232,13 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
 | M18 — FIXED (`test/models/kyc_profile_test.rb`): migration plus a model validation | `db/schema.rb` `kyc_profiles` | The `user_id` index isn't unique, although the model is `has_one`. | Migration to make the index unique. |
 
 ## Low / cleanup
-- **L1.** `app/services/payments/process_stripe_refund_webhook.rb` isn't used and has the same arity bug as H1. Delete it.
-- **L2.** `Reconciliation::RecoverStuckItemsJob` lives in `app/services/`. Move it to `app/jobs/reconciliation/`.
-- **L3.** Commented-out legacy code in the reconciliation jobs, `create_record.rb` and `payment_job.rb`. Remove it.
-- **L4.** `User has_many :idempotency_key` should be plural (`:idempotency_keys`).
-- **L5.** `Transaction` status `reversed` is never set. Either set it on the original when posting a reversal, or remove it.
-- **L6.** `WITHDRAWAL_CLEARING_*` is an asset account that goes negative on every payout. Consider making it a liability or a payable account so balances read naturally.
-- **L7.** `Deposit` upcases the currency code but other ledger services don't. This is harmless because `Currency#normalize_code` already upcases, but drop the redundant `.upcase` for consistency.
+- **L1.** `app/services/payments/process_stripe_refund_webhook.rb` isn't used and has the same arity bug as H1. Delete it. — FIXED: deleted; `CLAUDE.md` and the stripe-webhook-event skill no longer mention it.
+- **L2.** `Reconciliation::RecoverStuckItemsJob` lives in `app/services/`. Move it to `app/jobs/reconciliation/`. — FIXED: moved to `app/jobs/reconciliation/`, with its test in `test/jobs/reconciliation/`. Added `test/jobs/cron_schedule_test.rb`, which checks that every class in the cron schedule exists.
+- **L3.** Commented-out legacy code in the reconciliation jobs, `create_record.rb` and `payment_job.rb`. Remove it. — FIXED: removed from the three fan-out jobs and `ReconciliationResult`. `create_record.rb` and `payment_job.rb` were already rewritten under H8–H11.
+- **L4.** `User has_many :idempotency_key` should be plural (`:idempotency_keys`). — FIXED (`test/models/user_test.rb`).
+- **L5.** `Transaction` status `reversed` is never set. Either set it on the original when posting a reversal, or remove it. — FIXED: `reversed` removed. Posted transactions are read-only (H12), so the original can't be marked. A reversal is linked by its `WITHDRAWAL-REVERSAL-<id>` reference and `withdrawals.reversal_reference`.
+- **L6.** `WITHDRAWAL_CLEARING_*` is an asset account that goes negative on every payout. Consider making it a liability or a payable account so balances read naturally. — WON'T CHANGE (decision 2026-11-08): stays an asset; the negative balance is expected and documented in `db/seeds.rb` and `Ledger::Withdraw`, and pinned by `test/models/account_test.rb`. A development database that already has it as a liability must be fixed by hand.
+- **L7.** `Deposit` upcases the currency code but other ledger services don't. This is harmless because `Currency#normalize_code` already upcases, but drop the redundant `.upcase` for consistency. — FIXED.
 
 ## Checked and found correct
 - Partial and multiple refunds: `CreateRefund` locks the payment and caps the total at the payment amount minus pending and succeeded refunds.
