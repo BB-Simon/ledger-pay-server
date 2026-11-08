@@ -17,6 +17,9 @@ module Api
             record_type: params[:record_type]
           ) if params[:record_type].present?
 
+          # Bounded like reconciliation_runs#index.
+          records = records.limit(100)
+
           render json: records.map { |record|
             reconciliation_json(record)
           }

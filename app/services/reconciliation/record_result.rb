@@ -1,20 +1,20 @@
-
 module Reconciliation
+  # Stores a run's snapshot of one reconciliation outcome. A retry updates
+  # the row, so the snapshot always shows the latest outcome.
+  #
+  # Run counters and status are not changed here: CompleteRunItem recomputes
+  # them from the run's items.
   class RecordResult
     def self.call(run_id:, record:)
       run = ReconciliationRun.find(run_id)
 
       run.with_lock do
-        # A retry must not create or count the same result twice.
-        existing = run.reconciliation_results.find_by(
+        result = run.reconciliation_results.find_or_initialize_by(
           provider_reference: record.provider_reference
         )
 
-        return existing if existing
-
-        result = run.reconciliation_results.create!(
+        result.update!(
           reconciliation_record: record,
-          provider_reference: record.provider_reference,
           record_type: record.record_type,
           status: record.matched? ? :matched : :discrepancy,
           discrepancy_type: record.discrepancy_type,
@@ -23,29 +23,6 @@ module Reconciliation
           currency: record.currency,
           details: record.details || {}
         )
-
-        run.update!(
-          records_checked: run.records_checked + 1,
-          matched_count: run.matched_count + (result.matched? ? 1 : 0),
-          discrepancy_count: run.discrepancy_count +
-            (result.discrepancy? ? 1 : 0)
-        )
-
-        if run.records_checked >= run.total_items
-          run.update!(
-            status: :completed,
-            completed_at: Time.current
-          )
-        end
-
-        terminal_count = run.records_checked + run.failed_count
-
-        if terminal_count >= run.total_items
-          run.update!(
-            status: run.failed_count.positive? ? :failed : :completed,
-            completed_at: Time.current
-          )
-        end
 
         result
       end

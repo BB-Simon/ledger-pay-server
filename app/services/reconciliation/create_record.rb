@@ -55,7 +55,9 @@ module Reconciliation
           )
         end
 
-        record.save!
+        # updated_at doubles as "last confirmed", which Run uses to skip
+        # records it checked recently, so refresh it even when nothing changed.
+        record.changed? ? record.save! : record.touch
 
         record_reopened(record, previous) if reopen
       end
