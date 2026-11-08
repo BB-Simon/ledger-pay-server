@@ -1,4 +1,6 @@
 class ReconciliationRunItem < ApplicationRecord
+  TERMINAL_STATUSES = %w[matched discrepancy failed].freeze
+
   belongs_to :reconciliation_run
 
   enum :status, {
@@ -16,5 +18,10 @@ class ReconciliationRunItem < ApplicationRecord
   validates :internal_type, presence: true
 
   scope :unfinished, -> { where(status: %w[pending processing]) }
-  scope :terminal, -> { where(status: %w[matched discrepancy failed]) }
+  scope :terminal, -> { where(status: TERMINAL_STATUSES) }
+
+  # Terminal items are never reconciled again or overwritten.
+  def terminal?
+    status.in?(TERMINAL_STATUSES)
+  end
 end

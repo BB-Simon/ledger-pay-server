@@ -49,15 +49,16 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 ### Reconciliation (`app/services/reconciliation/`, `app/jobs/reconciliation/`)
 
 - Background jobs use **Sidekiq** (`include Sidekiq::Job`, `perform_async`), not ActiveJob. Cron schedules are in `config/initializers/sidekiq_cron.rb`: payments every 4 min, refunds every 7, payouts every 10, and stuck-item recovery every 30.
-- Fan-out: `Reconciliation::PaymentsJob` / `RefundsJob` / `PayoutsJob` → `Reconciliation::Run` creates a `ReconciliationRun` plus one `ReconciliationRunItem` for each record from the last 24h that has a provider id, then enqueues a per-item job (`PaymentJob` / `RefundJob` / `PayoutJob`).
-- Per-item jobs claim the item under a lock (`pending` → `processing`, which is skipped if another worker claimed it within the last 15 min). They fetch the Stripe object, call `ReconcilePayment` / `ReconcileRefund` / `ReconcilePayout` (which create a `ReconciliationRecord` that is matched or a discrepancy with a `discrepancy_type`), then `RecordResult` and `CompleteRunItem`. When retries are exhausted, the item is marked `failed`.
+- Fan-out: `Reconciliation::PaymentsJob` / `RefundsJob` / `PayoutsJob` → `Reconciliation::Run` creates a `ReconciliationRun` plus one `ReconciliationRunItem` for each candidate record (see below), then enqueues a per-item job (`PaymentJob` / `RefundJob` / `PayoutJob`).
+- Per-item jobs are thin; the work is in `Reconciliation::ProcessItem`. It claims the item under a lock (`pending` → `processing`, which is skipped if another worker claimed it within the last 15 min), fetches the Stripe object, and calls `ReconcilePayment` / `ReconcileRefund` / `ReconcilePayout`. Those create a `ReconciliationRecord` that is matched, or a discrepancy with a `discrepancy_type`; amount, currency and status are all compared. Then it calls `RecordResult` and `CompleteRunItem`. A record Stripe doesn't have, or one with no Stripe id, becomes a `missing_provider_record` discrepancy. When retries are exhausted, the item is marked `failed`.
+- Runs check records created in the last 24h, records still `pending` at any age, and pending records that never got a Stripe id after 6h (`Run::RECENT_WINDOW`, `UNSUBMITTED_AFTER`). `CreateRecord` reopens a resolved discrepancy when a different one is found.
 - `CompleteRunItem` is the only thing that moves an item to a terminal status. It recomputes run counters and the run status under a run lock, and never overwrites a terminal item.
 - `Reconciliation::RecoverStuckItemsJob` lives in `app/services/reconciliation/` even though it is a job. It resets stale `processing` items and re-enqueues stale `pending` ones.
 - Admins can resolve discrepancies (`ResolveRecord`) and retry run items (`RetryRunItem`) through the admin endpoints.
 
 ## Notes
 
-- Test coverage is mostly empty model-test stubs plus one empty admin controller test, so most behavior is untested.
+- Tests cover the ledger, Stripe submission, webhooks, auth, transfers, withdrawals, and reconciliation (see `docs/TESTING.md`). Model tests are still empty stubs.
 - GitHub CI (`.github/workflows/ci.yml`) runs brakeman, bundler-audit, rubocop, and `bin/rails db:test:prepare test`. It triggers on PRs and on pushes to `master`, while the default branch is `main`.
 - Known bugs are listed in `docs/BUGS.md`, with severity and a fix for each. Don't copy those patterns, and check that file before changing the affected code.
 

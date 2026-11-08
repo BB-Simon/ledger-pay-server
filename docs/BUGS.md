@@ -129,7 +129,7 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
 - **What happens:** the route is `/reconciliation_runs/:id/items/:item_id/retry`, so `params[:id]` is the **run** id and `params[:run_id]` doesn't exist. `find_by!(id: params[:id], reconciliation_run_id: nil)` never matches.
 - **Fix:** `ReconciliationRunItem.find_by!(id: params[:item_id], reconciliation_run_id: params[:id])`.
 
-### H8. Refund and payout reconciliation items never reach `failed`
+### H8. Refund and payout reconciliation items never reach `failed` — FIXED (test: `test/jobs/reconciliation/item_jobs_test.rb`). `RecordFailure` was deleted; all three item jobs mark the item failed through `CompleteRunItem`.
 - **Where:** `app/jobs/reconciliation/refund_job.rb` and `payout_job.rb` (`sidekiq_retries_exhausted`), and `app/services/reconciliation/record_failure.rb`
 - **What happens:**
   - The jobs are enqueued with a single argument, `item_id`, but the retries-exhausted hook reads `refund_id, run_id = job["args"]`. So `run_id` is `nil` and nothing is recorded.
@@ -137,12 +137,12 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
   - `RecordFailure` itself is also broken: its refund branch calls `refund.currency`, which doesn't exist (`NoMethodError`), and its payout branch writes a `Currency` object into a string column.
 - **Fix:** copy `PaymentJob`: `Reconciliation::CompleteRunItem.call(item_id: job["args"].first, status: :failed, error: exception)`. Then either delete `RecordFailure` or fix its currency handling (`refund.payment.currency.code`, `withdrawal.currency.code`).
 
-### H9. Refund and payout items get stuck if the record isn't reconcilable
+### H9. Refund and payout items get stuck if the record isn't reconcilable — FIXED (test: `test/jobs/reconciliation/item_jobs_test.rb`). The per-item work now lives in `Reconciliation::ProcessItem`, shared by all three jobs. A deleted or non-Stripe record fails the item. A record with no Stripe id is a `missing_provider_record` discrepancy.
 - **Where:** `refund_job.rb` and `payout_job.rb`, the `return unless ...provider == "stripe"` and `return if provider_..._id.blank?` lines
 - **What happens:** these early returns happen **after** the item has been claimed as `processing`. The item is never completed, gets reset to `pending` by recovery, and loops forever.
 - **Fix:** move the checks before the claim, or complete the item: `CompleteRunItem.call(item_id:, status: :discrepancy)` with a `missing_provider_record` record.
 
-### H10. Reconciliation never compares statuses, so missed webhooks show as "matched"
+### H10. Reconciliation never compares statuses, so missed webhooks show as "matched" — FIXED (tests: `test/jobs/reconciliation/item_jobs_test.rb`, `test/services/reconciliation/run_test.rb`). Still open: a payout that fails at Stripe more than 24h after being marked `succeeded`, with its webhook lost, isn't re-checked. Catching that needs a re-check schedule for settled records (see M2).
 - **Where:** `app/services/reconciliation/reconcile_payment.rb`, `reconcile_refund.rb`, `reconcile_payout.rb`, and `run.rb`
 - **What happens:**
   - Only the amount and currency are compared. A payment that is `succeeded` at Stripe but still `pending` locally (a lost webhook, so the user was never credited) is reported as **matched**. The same applies to refunds and payouts. The `status_mismatch` and `missing_provider_record` enum values are never produced.
@@ -158,10 +158,15 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
   - Rescue `Stripe::InvalidRequestError` with code `resource_missing` and record `missing_provider_record`.
   - Include non-terminal records regardless of age, and treat local records with no provider id that are older than N minutes as discrepancies.
 
-### H11. Re-reconciling a resolved discrepancy hides new problems
+### H11. Re-reconciling a resolved discrepancy hides new problems — FIXED (test: `test/services/reconciliation/create_record_test.rb`). A resolved record is reopened, with a `reconciliation.reopened` audit log, when it becomes a discrepancy of a different type. The same discrepancy, or a match, keeps the resolution.
 - **Where:** `app/services/reconciliation/create_record.rb`
 - **What happens:** records are upserted by `(provider, provider_reference)` and `update!(attributes)` overwrites them, but `resolution_status`, `resolved_by` and `resolved_at` are kept. After an admin resolves a discrepancy, a later run that finds a new or different discrepancy still shows the record as `resolved`.
 - **Fix:** when `status` or `discrepancy_type` changes, reset `resolution_status: :open` and clear the resolution fields. Write an audit log for the reopen.
+
+### H16. Reconciliation items crash on a method that doesn't exist — FIXED (found 2026-11-08; test: `test/jobs/reconciliation/item_jobs_test.rb`)
+- **Where:** `app/models/reconciliation_run_item.rb`, used by all three item jobs, `CompleteRunItem` and `RecoverStuckItemsJob`
+- **What happens:** the item jobs call `item.terminal?` when claiming an item, and `CompleteRunItem` calls it when finishing one, but the model only had a `terminal` *scope*. Every item job raised `NoMethodError`, so no reconciliation item could ever complete, and marking an item failed after its retries ran out crashed too.
+- **Fix:** add `ReconciliationRunItem#terminal?` (status is matched, discrepancy or failed).
 
 ### H12. Nothing enforces ledger immutability
 - **Where:** `app/models/ledger_entry.rb`, `app/models/transaction.rb`
