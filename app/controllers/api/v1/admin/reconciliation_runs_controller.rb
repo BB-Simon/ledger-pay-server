@@ -45,10 +45,12 @@ module Api
           @run = ReconciliationRun.find(params[:id])
         end
 
+        # Route: /reconciliation_runs/:id/items/:item_id/retry, so :id is the
+        # run. Scoping to the run returns 404 for an item from another run.
         def set_item
           @item = ReconciliationRunItem.find_by!(
-            id: params[:id],
-            reconciliation_run_id: params[:run_id]
+            id: params[:item_id],
+            reconciliation_run_id: params[:id]
           )
         end
 
