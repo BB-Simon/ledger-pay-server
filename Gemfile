@@ -61,6 +61,13 @@ group :development, :test do
   gem "rubocop-rails-omakase", require: false
 
   gem "dotenv-rails"
+
+  # API docs (OpenAPI/Swagger). RSpec is used only for the rswag doc specs in
+  # spec/requests/; all other tests are Minitest (see AGENTS.md).
+  gem "rspec-rails", "~> 8.0"
+  gem "rswag-specs", "~> 2.17"
+  gem "rswag-api", "~> 2.17"
+  gem "rswag-ui", "~> 2.17"
 end
 
 gem "fiddle", "~> 1.1"

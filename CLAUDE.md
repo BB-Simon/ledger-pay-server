@@ -15,6 +15,9 @@ bundle exec sidekiq                         # background worker + cron (needs Re
 bin/rails test                              # full test suite (Minitest, parallel, fixtures :all)
 bin/rails test test/models/payment_test.rb  # single file
 bin/rails test test/models/payment_test.rb:12   # single test by line
+bundle exec rspec                           # API doc specs (rswag), spec/requests/ only
+RAILS_ENV=test RSWAG_DRY_RUN=0 bin/rails rswag:specs:swaggerize   # regenerate swagger/v1/swagger.yaml
+                                            # Swagger UI: http://localhost:3000/api-docs (development only)
 bin/rubocop                                 # lint (rubocop-rails-omakase)
 bin/brakeman --no-pager                     # security scan
 bin/bundler-audit                           # gem CVE audit

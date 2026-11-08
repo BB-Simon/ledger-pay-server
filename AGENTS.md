@@ -91,11 +91,13 @@
 
 ### Testing
 
-- Tests are Minitest (`test/`) with YAML fixtures (`test/fixtures/`), not RSpec/FactoryBot. They run in parallel threads, so don't depend on global state.
+- Tests are Minitest (`test/`) with YAML fixtures (`test/fixtures/`), not RSpec/FactoryBot. They run serially by default (`PARALLEL_WORKERS` opts in); don't depend on global state.
+- One exception: **RSpec is used only for the rswag API-doc specs** in `spec/requests/`, which generate `swagger/v1/swagger.yaml`. Don't write any other RSpec tests.
+- Every new or changed endpoint needs its doc spec updated (schemas mirror the controller's `*_json` method, `additionalProperties: false`), then regenerate and commit the YAML: `RAILS_ENV=test RSWAG_DRY_RUN=0 bin/rails rswag:specs:swaggerize`. CI fails if the committed YAML is stale.
 - Integration tests (`ActionDispatch::IntegrationTest`) for every endpoint: happy path, 401, 403, 404, 422, and response shape.
 - Service tests cover ledger balance effects: assert entries balance and account balances change by the expected amount.
 - Job tests call `perform` directly; test the service logic separately. Use `Sidekiq::Testing.fake!` to assert enqueueing; don't run real Sidekiq in tests.
-- Tests never hit Stripe or the network. Stub Stripe calls (e.g. `Stripe::PaymentIntent.stub(:retrieve, fake)` with `minitest/mock`) and build webhook events with `Stripe::Event.construct_from`.
+- Tests never hit Stripe or the network. Minitest 6 has no `stub`: use `with_class_method` from `test/test_helper.rb` (in doc specs, rspec-mocks' `allow(...).to receive`), and build Stripe objects and webhook events with `Stripe::*.construct_from`.
 - Add a test that every class referenced in `config/initializers/sidekiq_cron.rb` exists.
 
 ## Rules — Nice-to-have

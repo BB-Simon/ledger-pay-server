@@ -5,7 +5,7 @@ description: Write Minitest tests for this app (models, services, ledger, contro
 
 # Write tests (Minitest + fixtures)
 
-This app uses **Minitest + YAML fixtures** (`test/test_helper.rb`: `fixtures :all`, parallel **threads**). There is no RSpec, FactoryBot or WebMock; don't add them without asking.
+This app uses **Minitest + YAML fixtures** (`test/test_helper.rb`: `fixtures :all`, parallel **threads**). There is no FactoryBot or WebMock; don't add them without asking. RSpec exists **only** for the rswag API-doc specs in `spec/requests/` (see the `new-endpoint` skill); behavior tests are always Minitest.
 
 ## 0. Check the fixtures first
 `fixtures :all` loads every file in `test/fixtures/`. Several are still Rails scaffold placeholders (`MyString`, `users.yml` with `{}`, `accounts.yml` with a non-existent `string` column, `wallets.yml` missing `currency`). Any broken fixture breaks **every** test. Run `bin/rails test` once. If fixtures fail to load, fix them before writing tests, using `db/schema.rb` for the real columns, `null: false` constraints and check constraints (e.g. `users.role`).

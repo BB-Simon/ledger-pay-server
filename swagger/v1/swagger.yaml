@@ -1,0 +1,1456 @@
+---
+openapi: 3.0.3
+info:
+  title: Ledger Pay API
+  version: v1
+  description: |
+    Wallet and payments API with a double-entry ledger.
+
+    - **Amounts** are integers in minor units (cents). Decimals are rejected with 422.
+    - **Auth:** send `Authorization: Bearer <token>`. The token comes from `POST /api/v1/auth/login`.
+      It's an opaque token, not a JWT.
+    - **Idempotency:** money-moving requests take an `Idempotency-Key` header (required for transfers).
+    - **Errors** are `{ "error": "message" }`. Two exceptions: registration validation returns
+      `{ "errors": [...] }`, and a record that doesn't exist returns Rails' default
+      `{ "status": 404, "error": "Not Found" }`.
+    - **Settlement:** payments, refunds and payouts are created `pending`. Stripe webhooks move them to
+      their final status; the ledger only changes then.
+servers:
+- url: http://localhost:3000
+  description: Local development
+tags:
+- name: Auth
+  description: Register and log in
+- name: Account
+  description: The current user and KYC
+- name: Transfers
+  description: Wallet-to-wallet transfers
+- name: Payments
+  description: Card payments into a wallet, and refunds
+- name: Withdrawals
+  description: Payouts from a wallet to a bank account
+- name: Webhooks
+  description: Called by Stripe, not by clients
+- name: 'Admin: Reconciliation'
+  description: Admin only. Reconciliation against Stripe
+security:
+- bearer_auth: []
+paths:
+  "/api/v1/me":
+    get:
+      summary: Current user
+      tags:
+      - Account
+      responses:
+        '200':
+          description: the logged-in user
+          content:
+            application/json:
+              example:
+                user:
+                  id: 663665735
+                  email: alice@example.com
+                  status: active
+                  created_at: '2026-01-15T12:00:00.000Z'
+                  updated_at: '2026-01-15T12:00:00.000Z'
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  user:
+                    "$ref": "#/components/schemas/UserProfile"
+                required:
+                - user
+        '401':
+          description: missing, unknown or expired token, or the user isn't active
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/kyc":
+    get:
+      summary: Current user's KYC profile
+      tags:
+      - Account
+      responses:
+        '200':
+          description: the KYC profile
+          content:
+            application/json:
+              example:
+                kyc:
+                  status: pending
+                  verification_level:
+                  verified_at:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  kyc:
+                    "$ref": "#/components/schemas/Kyc"
+                required:
+                - kyc
+        '401':
+          description: not logged in
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: the user has no KYC profile
+          content:
+            application/json:
+              example:
+                error: KYC profile not found
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/admin/reconciliation_records":
+    get:
+      summary: List reconciliation records
+      tags:
+      - 'Admin: Reconciliation'
+      description: Newest first, at most 100.
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - matched
+          - discrepancy
+      - name: record_type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - payment
+          - refund
+          - payout
+      responses:
+        '200':
+          description: records
+          content:
+            application/json:
+              example:
+              - id: 1
+                provider: stripe
+                provider_reference: po_doc
+                record_type: payout
+                internal_type:
+                internal_id:
+                expected_amount: 400
+                actual_amount: 500
+                currency: usd
+                status: discrepancy
+                discrepancy_type: amount_mismatch
+                details:
+                  provider_status: paid
+                created_at: '2026-01-15T12:00:00.000Z'
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/ReconciliationRecord"
+        '401':
+          description: not logged in
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '403':
+          description: not an admin
+          content:
+            application/json:
+              example:
+                error: Admin access required
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/admin/reconciliation_records/{id}":
+    parameters:
+    - name: id
+      in: path
+      schema:
+        type: integer
+      required: true
+    get:
+      summary: Get a reconciliation record
+      tags:
+      - 'Admin: Reconciliation'
+      responses:
+        '200':
+          description: the record
+          content:
+            application/json:
+              example:
+                id: 2
+                provider: stripe
+                provider_reference: po_doc
+                record_type: payout
+                internal_type:
+                internal_id:
+                expected_amount: 400
+                actual_amount: 500
+                currency: usd
+                status: discrepancy
+                discrepancy_type: amount_mismatch
+                details:
+                  provider_status: paid
+                created_at: '2026-01-15T12:00:00.000Z'
+              schema:
+                "$ref": "#/components/schemas/ReconciliationRecord"
+        '404':
+          description: not found
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+  "/api/v1/admin/reconciliation_records/{id}/resolve":
+    parameters:
+    - name: id
+      in: path
+      schema:
+        type: integer
+      required: true
+    post:
+      summary: Resolve a discrepancy
+      tags:
+      - 'Admin: Reconciliation'
+      description: Marks an open discrepancy resolved, with notes. It's reopened automatically
+        if a different discrepancy is found later.
+      parameters: []
+      responses:
+        '200':
+          description: resolved
+          content:
+            application/json:
+              example:
+                id: 3
+                provider: stripe
+                provider_reference: po_doc
+                record_type: payout
+                internal_type:
+                internal_id:
+                expected_amount: 400
+                actual_amount: 500
+                currency: usd
+                status: discrepancy
+                discrepancy_type: amount_mismatch
+                details:
+                  provider_status: paid
+                created_at: '2026-01-15T12:00:00.000Z'
+              schema:
+                "$ref": "#/components/schemas/ReconciliationRecord"
+        '422':
+          description: not a discrepancy, already resolved, or notes missing
+          content:
+            application/json:
+              example:
+                error: Record is not a discrepancy
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolution_notes:
+                  type: string
+                  example: Checked with Stripe; fee adjustment.
+              required:
+              - resolution_notes
+  "/api/v1/admin/reconciliation_runs":
+    get:
+      summary: List reconciliation runs
+      tags:
+      - 'Admin: Reconciliation'
+      description: Newest first, at most 100.
+      responses:
+        '200':
+          description: runs
+          content:
+            application/json:
+              example:
+              - id: 1
+                provider: stripe
+                run_type: payments
+                status: failed
+                total_items: 1
+                records_checked: 0
+                matched_count: 0
+                discrepancy_count: 0
+                failed_count: 1
+                started_at: '2026-01-15T11:00:00.000Z'
+                completed_at: '2026-01-15T11:10:00.000Z'
+                error_message:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/ReconciliationRun"
+        '403':
+          description: not an admin
+          content:
+            application/json:
+              example:
+                error: Admin access required
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/admin/reconciliation_runs/{id}":
+    parameters:
+    - name: id
+      in: path
+      schema:
+        type: integer
+      required: true
+    get:
+      summary: Get a run with its items
+      tags:
+      - 'Admin: Reconciliation'
+      responses:
+        '200':
+          description: the run and its items
+          content:
+            application/json:
+              example:
+                run:
+                  id: 2
+                  provider: stripe
+                  run_type: payments
+                  status: failed
+                  total_items: 1
+                  records_checked: 0
+                  matched_count: 0
+                  discrepancy_count: 0
+                  failed_count: 1
+                  started_at: '2026-01-15T11:00:00.000Z'
+                  completed_at: '2026-01-15T11:10:00.000Z'
+                  error_message:
+                items:
+                - id: 1
+                  record_type: payment
+                  internal_type: Payment
+                  internal_id: 1
+                  provider_reference: pi_doc
+                  status: failed
+                  attempts: 5
+                  started_at:
+                  completed_at:
+                  error_class: Stripe::APIConnectionError
+                  error_message: timeout
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  run:
+                    "$ref": "#/components/schemas/ReconciliationRun"
+                  items:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/ReconciliationRunItem"
+                required:
+                - run
+                - items
+  "/api/v1/admin/reconciliation_runs/{id}/items/{item_id}/retry":
+    parameters:
+    - name: id
+      in: path
+      schema:
+        type: integer
+      description: Run id
+      required: true
+    - name: item_id
+      in: path
+      schema:
+        type: integer
+      required: true
+    post:
+      summary: Retry a failed run item
+      tags:
+      - 'Admin: Reconciliation'
+      description: Puts a failed item back to pending, reopens the run and enqueues
+        the item's job.
+      responses:
+        '202':
+          description: retry enqueued
+          content:
+            application/json:
+              example:
+                message: Retry enqueued
+                item:
+                  id: 2
+                  record_type: payment
+                  internal_type: Payment
+                  internal_id: 1
+                  provider_reference: pi_doc
+                  status: pending
+                  attempts: 5
+                  started_at:
+                  completed_at:
+                  error_class:
+                  error_message:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  message:
+                    type: string
+                  item:
+                    "$ref": "#/components/schemas/ReconciliationRunItem"
+                required:
+                - message
+                - item
+        '404':
+          description: the item doesn't exist in this run
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+        '422':
+          description: the item isn't failed, or the run is still running
+          content:
+            application/json:
+              example:
+                error: Only failed items can be retried
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/auth/register":
+    post:
+      summary: Register a new user
+      tags:
+      - Auth
+      description: Creates the user with a pending KYC profile and a USD wallet. Rate
+        limited to 10 requests a minute per IP.
+      security: []
+      parameters: []
+      responses:
+        '201':
+          description: user registered
+          content:
+            application/json:
+              example:
+                user:
+                  id: 902541636
+                  email: carol@example.com
+                  status: active
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  user:
+                    "$ref": "#/components/schemas/User"
+                required:
+                - user
+        '422':
+          description: invalid email or password
+          content:
+            application/json:
+              example:
+                errors:
+                - Email can't be blank
+              schema:
+                "$ref": "#/components/schemas/ValidationErrors"
+        '429':
+          description: too many requests from this IP
+          content:
+            application/json:
+              example:
+                error: Too many requests, try again later
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: carol@example.com
+                password:
+                  type: string
+                  format: password
+                  example: password123
+              required:
+              - email
+              - password
+  "/api/v1/auth/login":
+    post:
+      summary: Log in
+      tags:
+      - Auth
+      description: Returns a bearer token valid for 7 days. Every failure gets the
+        same 401, so responses don't reveal which emails exist. Rate limited to 10
+        requests a minute per IP.
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: logged in
+          content:
+            application/json:
+              example:
+                token: "<64 hex characters, shown once>"
+                user:
+                  id: 663665735
+                  email: alice@example.com
+                  status: active
+              schema:
+                "$ref": "#/components/schemas/AuthSession"
+        '401':
+          description: wrong email or password, or the account isn't active
+          content:
+            application/json:
+              example:
+                error: Invalid email or password
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '429':
+          description: too many requests from this IP
+          content:
+            application/json:
+              example:
+                error: Too many requests, try again later
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: alice@example.com
+                password:
+                  type: string
+                  format: password
+                  example: password
+              required:
+              - email
+              - password
+  "/api/v1/payments":
+    post:
+      summary: Start a card payment into a wallet
+      tags:
+      - Payments
+      description: Creates a pending payment and a Stripe PaymentIntent. Confirm it
+        on the client with the returned `client_secret`; the wallet is credited when
+        Stripe's webhook reports success.
+      parameters: []
+      responses:
+        '201':
+          description: payment created; confirm it with the client secret
+          content:
+            application/json:
+              example:
+                id: 1
+                amount: 1000
+                status: pending
+                currency: USD
+                provider: stripe
+                provider_payment_id: pi_doc
+                client_secret: pi_doc_secret_123
+                refunded_amount: 0
+                refundable_amount: 1000
+              schema:
+                "$ref": "#/components/schemas/Payment"
+        '401':
+          description: not logged in
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: the wallet isn't yours
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+        '422':
+          description: invalid amount or wallet, or Stripe rejected the payment (it
+            is marked failed)
+          content:
+            application/json:
+              example:
+                error: Amount must be greater than 0
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '503':
+          description: Stripe didn't answer; the payment is marked failed, try again
+          content:
+            application/json:
+              example:
+                error: Payment provider unavailable, please try again
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wallet_id:
+                  type: integer
+                amount:
+                  type: integer
+                  minimum: 1
+                  description: Cents
+              required:
+              - wallet_id
+              - amount
+  "/api/v1/payments/{id}":
+    parameters:
+    - name: id
+      in: path
+      schema:
+        type: integer
+      required: true
+    get:
+      summary: Get one of your payments
+      tags:
+      - Payments
+      responses:
+        '200':
+          description: the payment
+          content:
+            application/json:
+              example:
+                id: 3
+                amount: 1000
+                status: succeeded
+                currency: USD
+                provider: stripe
+                provider_payment_id: pi_doc
+                refunded_amount: 0
+                refundable_amount: 1000
+              schema:
+                "$ref": "#/components/schemas/Payment"
+        '401':
+          description: not logged in
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: not found, or not yours
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+  "/api/v1/payments/{payment_id}/refunds":
+    parameters:
+    - name: payment_id
+      in: path
+      schema:
+        type: integer
+      required: true
+    get:
+      summary: List a payment's refunds
+      tags:
+      - Payments
+      description: Newest first. Not paginated yet.
+      responses:
+        '200':
+          description: the refunds
+          content:
+            application/json:
+              example:
+              - id: 1
+                payment_id: 4
+                amount: 200
+                currency: USD
+                provider: stripe
+                provider_refund_id: re_doc
+                status: succeeded
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/Refund"
+    post:
+      summary: Refund part or all of a payment
+      tags:
+      - Payments
+      description: Creates a pending refund and sends it to Stripe. The total refunded
+        can't exceed the payment, and the wallet must still hold the money. The wallet
+        is debited when Stripe's webhook reports success.
+      parameters:
+      - "$ref": "#/components/parameters/IdempotencyKeyOptional"
+      responses:
+        '201':
+          description: refund created (pending until Stripe confirms)
+          content:
+            application/json:
+              example:
+                id: 2
+                payment_id: 5
+                amount: 400
+                currency: USD
+                provider: stripe
+                provider_refund_id: re_doc
+                status: pending
+                reason: requested_by_customer
+              schema:
+                "$ref": "#/components/schemas/Refund"
+        '404':
+          description: not found, or not yours
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+        '422':
+          description: invalid amount, more than refundable, insufficient wallet balance,
+            or Stripe rejected it
+          content:
+            application/json:
+              example:
+                error: Refund amount exceeds refundable amount
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: integer
+                  minimum: 1
+                  description: Cents
+                reason:
+                  type: string
+                  enum:
+                  - duplicate
+                  - fraudulent
+                  - requested_by_customer
+              required:
+              - amount
+  "/api/v1/transfers":
+    post:
+      summary: Transfer money to another wallet
+      tags:
+      - Transfers
+      description: Moves money between two wallets in the same currency. Only money
+        not held by pending withdrawals or refunds can be sent. Both wallets must
+        be active.
+      parameters:
+      - "$ref": "#/components/parameters/IdempotencyKeyRequired"
+      responses:
+        '201':
+          description: transferred
+          content:
+            application/json:
+              example:
+                id: 6
+                reference: 8b1d3c52-0d6e-4f3a-9c51-2f7e1a9b6c40
+                status: posted
+                transaction_type: transfer
+              schema:
+                "$ref": "#/components/schemas/TransferTransaction"
+        '401':
+          description: not logged in
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: the source wallet isn't yours, or a wallet doesn't exist
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+        '422':
+          description: missing Idempotency-Key, invalid amount, insufficient funds,
+            or a key reused with different parameters
+          content:
+            application/json:
+              example:
+                error: Insufficient balance in source wallet
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_wallet_id:
+                  type: integer
+                  description: One of your wallets
+                to_wallet_id:
+                  type: integer
+                  description: Any active wallet in the same currency
+                amount:
+                  type: integer
+                  minimum: 1
+                  description: Cents
+              required:
+              - from_wallet_id
+              - to_wallet_id
+              - amount
+  "/api/v1/webhooks/stripe":
+    post:
+      summary: Receive a Stripe event
+      tags:
+      - Webhooks
+      description: |
+        Called by Stripe, authenticated by the `Stripe-Signature` header. Each event is stored once (redeliveries are
+        ignored) and settles the matching payment, refund or payout.
+
+        - An event that can never be applied (wrong amount, unknown record) is marked failed and still answered with
+          200, so Stripe stops resending it.
+        - An event that arrives before the payout or refund has its Stripe id saved gets 409, so Stripe resends it later.
+        - Temporary errors return 5xx, so Stripe retries.
+      security: []
+      parameters:
+      - "$ref": "#/components/parameters/StripeSignature"
+      responses:
+        '200':
+          description: event received (applied, or recorded as failed)
+          content:
+            application/json:
+              example:
+                received: true
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  received:
+                    type: boolean
+                required:
+                - received
+        '400':
+          description: invalid signature or payload
+          content:
+            application/json:
+              example:
+                error: Invalid signature
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '409':
+          description: the local record isn't submitted to Stripe yet; Stripe should
+            resend later
+          content:
+            application/json:
+              example:
+                error: Withdrawal 3 not submitted to Stripe yet
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: A Stripe event object
+  "/api/v1/wallets/{wallet_id}/withdrawals":
+    parameters:
+    - name: wallet_id
+      in: path
+      schema:
+        type: integer
+      required: true
+    post:
+      summary: Withdraw to your bank account
+      tags:
+      - Withdrawals
+      description: Holds the amount and sends a Stripe payout. If Stripe doesn't answer,
+        the withdrawal stays pending and is retried in the background. The wallet
+        is debited when Stripe reports the payout paid.
+      parameters:
+      - "$ref": "#/components/parameters/IdempotencyKeyOptional"
+      responses:
+        '201':
+          description: withdrawal created (pending until the payout is paid)
+          content:
+            application/json:
+              example:
+                id: 4
+                wallet_id: 609256058
+                amount: 400
+                currency: USD
+                provider: stripe
+                provider_withdrawal_id: po_doc
+                status: pending
+              schema:
+                "$ref": "#/components/schemas/Withdrawal"
+        '401':
+          description: not logged in
+          content:
+            application/json:
+              example:
+                error: Authentication required
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: the wallet isn't yours
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+        '422':
+          description: invalid amount, insufficient available balance, or Stripe rejected
+            the payout
+          content:
+            application/json:
+              example:
+                error: Insufficient wallet balance
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: integer
+                  minimum: 1
+                  description: Cents
+              required:
+              - amount
+  "/api/v1/withdrawals":
+    get:
+      summary: List your withdrawals
+      tags:
+      - Withdrawals
+      description: Newest first. Not paginated yet.
+      responses:
+        '200':
+          description: your withdrawals
+          content:
+            application/json:
+              example:
+              - id: 5
+                wallet_id: 609256058
+                amount: 400
+                currency: USD
+                provider: stripe
+                provider_withdrawal_id: po_doc
+                status: pending
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/Withdrawal"
+  "/api/v1/withdrawals/{id}":
+    parameters:
+    - name: id
+      in: path
+      schema:
+        type: integer
+      required: true
+    get:
+      summary: Get one of your withdrawals
+      tags:
+      - Withdrawals
+      responses:
+        '200':
+          description: the withdrawal
+          content:
+            application/json:
+              example:
+                id: 6
+                wallet_id: 609256058
+                amount: 400
+                currency: USD
+                provider: stripe
+                provider_withdrawal_id: po_doc
+                status: pending
+              schema:
+                "$ref": "#/components/schemas/Withdrawal"
+        '404':
+          description: not found, or not yours
+          content:
+            application/json:
+              example:
+                status: 404
+                error: Not Found
+              schema:
+                "$ref": "#/components/schemas/RailsNotFound"
+components:
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque token
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ValidationErrors:
+      type: object
+      additionalProperties: false
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+      - errors
+    RailsNotFound:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: Not Found
+      required:
+      - status
+      - error
+      description: Rails' default body for a record that doesn't exist (not the usual
+        { error } shape)
+    User:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          example: active
+      required:
+      - id
+      - email
+      - status
+    UserProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - email
+      - status
+      - created_at
+      - updated_at
+    AuthSession:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          description: Opaque bearer token. Shown once; only its digest is stored.
+        user:
+          "$ref": "#/components/schemas/User"
+      required:
+      - token
+      - user
+    Kyc:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - verified
+          - rejected
+          - under_review
+        verification_level:
+          type: string
+          nullable: true
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - status
+      - verification_level
+      - verified_at
+    TransferTransaction:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        reference:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - posted
+          - failed
+        transaction_type:
+          type: string
+          example: transfer
+      required:
+      - id
+      - reference
+      - status
+      - transaction_type
+    Payment:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        amount:
+          type: integer
+          description: Amount in minor units (cents)
+        status:
+          type: string
+          enum:
+          - pending
+          - succeeded
+          - failed
+          - canceled
+        currency:
+          type: string
+          example: USD
+        provider:
+          type: string
+          example: stripe
+        provider_payment_id:
+          type: string
+        failure_code:
+          type: string
+        failure_message:
+          type: string
+        client_secret:
+          type: string
+          description: Only on create. Confirm the payment with Stripe.js.
+        refunded_amount:
+          type: integer
+          description: Amount in minor units (cents)
+        refundable_amount:
+          type: integer
+          description: Amount in minor units (cents)
+      required:
+      - id
+      - amount
+      - status
+      - currency
+      - provider
+      - refunded_amount
+      - refundable_amount
+    Refund:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        payment_id:
+          type: integer
+        amount:
+          type: integer
+          description: Amount in minor units (cents)
+        currency:
+          type: string
+        provider:
+          type: string
+        provider_refund_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - succeeded
+          - failed
+          - canceled
+        reason:
+          type: string
+      required:
+      - id
+      - payment_id
+      - amount
+      - currency
+      - provider
+      - status
+    Withdrawal:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        wallet_id:
+          type: integer
+        amount:
+          type: integer
+          description: Amount in minor units (cents)
+        currency:
+          type: string
+        provider:
+          type: string
+        provider_withdrawal_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - succeeded
+          - failed
+          - canceled
+        failure_code:
+          type: string
+        failure_message:
+          type: string
+      required:
+      - id
+      - wallet_id
+      - amount
+      - currency
+      - provider
+      - status
+    ReconciliationRecord:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        provider:
+          type: string
+        provider_reference:
+          type: string
+        record_type:
+          type: string
+          enum:
+          - payment
+          - refund
+          - payout
+        internal_type:
+          type: string
+          nullable: true
+        internal_id:
+          type: integer
+          nullable: true
+        expected_amount:
+          type: integer
+          description: Amount in minor units (cents)
+          nullable: true
+        actual_amount:
+          type: integer
+          description: Amount in minor units (cents)
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - matched
+          - discrepancy
+          - unresolved
+        discrepancy_type:
+          type: string
+          nullable: true
+          enum:
+          - missing_internal_record
+          - missing_provider_record
+          - amount_mismatch
+          - currency_mismatch
+          - status_mismatch
+          -
+        details:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - provider
+      - provider_reference
+      - record_type
+      - internal_type
+      - internal_id
+      - expected_amount
+      - actual_amount
+      - currency
+      - status
+      - discrepancy_type
+      - details
+      - created_at
+    ReconciliationRun:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        provider:
+          type: string
+        run_type:
+          type: string
+          enum:
+          - payments
+          - refunds
+          - payouts
+        status:
+          type: string
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+        total_items:
+          type: integer
+        records_checked:
+          type: integer
+        matched_count:
+          type: integer
+        discrepancy_count:
+          type: integer
+        failed_count:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+      required:
+      - id
+      - provider
+      - run_type
+      - status
+      - total_items
+      - records_checked
+      - matched_count
+      - discrepancy_count
+      - failed_count
+      - started_at
+      - completed_at
+      - error_message
+    ReconciliationRunItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        record_type:
+          type: string
+          enum:
+          - payment
+          - refund
+          - payout
+        internal_type:
+          type: string
+        internal_id:
+          type: integer
+          nullable: true
+        provider_reference:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - pending
+          - processing
+          - matched
+          - discrepancy
+          - failed
+        attempts:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_class:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+      required:
+      - id
+      - record_type
+      - internal_type
+      - internal_id
+      - provider_reference
+      - status
+      - attempts
+      - started_at
+      - completed_at
+      - error_class
+      - error_message
+  parameters:
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Required. A retry with the same key and the same body returns the
+        original result; the same key with a different body gets 422.
+    IdempotencyKeyOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional but recommended. A retry with the same key and the same
+        body returns the original record instead of creating another; the same key
+        with a different body gets 422.
+    StripeSignature:
+      name: Stripe-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Set by Stripe. Verified against STRIPE_WEBHOOK_SECRET.
