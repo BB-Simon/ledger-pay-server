@@ -1,6 +1,7 @@
 require "test_helper"
 
 # Bug H11: re-reconciling a resolved discrepancy must not hide a new problem.
+# Bug M2: updated_at records when the record was last confirmed.
 class Reconciliation::CreateRecordTest < ActiveSupport::TestCase
   def save(status:, discrepancy_type: nil, actual_amount: 500)
     Reconciliation::CreateRecord.call(
@@ -51,6 +52,15 @@ class Reconciliation::CreateRecordTest < ActiveSupport::TestCase
     record.reload
     assert record.matched?
     assert record.resolved?
+  end
+
+  test "confirming an unchanged record refreshes updated_at" do
+    record = save(status: :matched)
+    record.update_columns(updated_at: 3.hours.ago)
+
+    save(status: :matched)
+
+    assert_in_delta Time.current, record.reload.updated_at, 5.seconds
   end
 
   test "an open record is simply updated" do

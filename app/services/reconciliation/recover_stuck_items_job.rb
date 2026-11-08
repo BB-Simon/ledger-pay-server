@@ -1,4 +1,13 @@
+require "sidekiq/api"
+
 module Reconciliation
+  # Puts reconciliation items back to work when their job was lost:
+  # - processing for longer than STALE_AFTER (the worker died): released to
+  #   pending, then enqueued;
+  # - pending and idle for longer than STALE_AFTER: enqueued.
+  # An item is enqueued only if Sidekiq holds no job for it (queued,
+  # scheduled, or waiting to retry), so items in retry backoff aren't
+  # duplicated.
   class RecoverStuckItemsJob
     include Sidekiq::Job
 
@@ -6,7 +15,30 @@ module Reconciliation
 
     STALE_AFTER = 15.minutes
 
+    JOB_CLASSES = {
+      "payment" => Reconciliation::PaymentJob,
+      "refund" => Reconciliation::RefundJob,
+      "payout" => Reconciliation::PayoutJob
+    }.freeze
+
+    # [job class name, item id] for every reconciliation item job that
+    # Sidekiq still holds. Read once per pass.
+    def self.jobs_in_sidekiq
+      class_names = JOB_CLASSES.values.map(&:name)
+      queues = JOB_CLASSES.values.map { |job_class| job_class.get_sidekiq_options["queue"].to_s }.uniq
+      sources = [ Sidekiq::RetrySet.new, Sidekiq::ScheduledSet.new ] +
+        queues.map { |queue| Sidekiq::Queue.new(queue) }
+
+      sources.each_with_object(Set.new) do |source, held|
+        source.each do |job|
+          held << [ job.klass, job.args.first ] if class_names.include?(job.klass)
+        end
+      end
+    end
+
     def perform
+      @jobs_in_sidekiq = self.class.jobs_in_sidekiq
+
       recover_stale_processing_items
       reenqueue_stale_pending_items
     end
@@ -20,17 +52,15 @@ module Reconciliation
         .where(status: :processing)
         .where("started_at < ?", cutoff)
         .find_each do |item|
-          item.with_lock do
-            next unless item.processing?
-            next unless item.started_at && item.started_at < cutoff
+          released = item.with_lock do
+            next false unless item.processing?
+            next false unless item.started_at && item.started_at < cutoff
 
-            item.update!(
-              status: :pending,
-              started_at: nil
-            )
+            item.update!(status: :pending, started_at: nil)
+            true
           end
 
-          enqueue_item(item)
+          enqueue_item(item) if released
         end
     end
 
@@ -46,11 +76,8 @@ module Reconciliation
     end
 
     def enqueue_item(item)
-      job_class = {
-        "payment" => Reconciliation::PaymentJob,
-        "refund" => Reconciliation::RefundJob,
-        "payout" => Reconciliation::PayoutJob
-      }.fetch(item.record_type)
+      job_class = JOB_CLASSES.fetch(item.record_type)
+      return if @jobs_in_sidekiq.include?([ job_class.name, item.id ])
 
       job_class.perform_async(item.id)
 
