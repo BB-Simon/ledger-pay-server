@@ -14,9 +14,16 @@ module Api
           )
           Rails.logger.info "Stripe webhook received: #{event.id} #{event.type}"
 
+          # Events that can never be applied come back marked failed (and
+          # audit-logged), and are still acknowledged so Stripe stops retrying.
           Payments::ProcessStripeWebhook.call(event: event)
 
           render json: { received: true }, status: :ok
+
+        # Any non-2xx makes Stripe redeliver the event later.
+        rescue Payments::ProcessStripeWebhook::NotReady => e
+          Rails.logger.warn "Stripe webhook #{event.id} not ready: #{e.message}"
+          render json: { error: e.message }, status: :conflict
 
         rescue JSON::ParserError
           render json: { error: "Invalid payload" }, status: :bad_request

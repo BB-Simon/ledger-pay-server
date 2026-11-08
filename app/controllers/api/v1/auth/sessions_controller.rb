@@ -6,10 +6,13 @@ module Api
     module Auth
       class SessionsController < ApplicationController
         def create
-          user = User.find_by(email: params[:email.to_s.strip.downcase])
+          # Emails are stored stripped and downcased (User#normalize_email).
+          user = User.find_by(email: params[:email].to_s.strip.downcase)
 
-          unless user&.authenticate(params[:password])
-            render json: {
+          # One message for every failure, so responses don't reveal which
+          # emails exist or which accounts are suspended.
+          unless user&.authenticate(params[:password].to_s) && user.status == "active"
+            return render json: {
               error: "Invalid email or password"
             }, status: :unauthorized
           end

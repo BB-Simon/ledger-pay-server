@@ -79,31 +79,31 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
 
 ## High
 
-### H1. A `refund.updated` event with status `failed` crashes
+### H1. A `refund.updated` event with status `failed` crashes — FIXED (test: `test/services/payments/process_stripe_webhook_test.rb`)
 - **Where:** `app/services/payments/process_stripe_webhook.rb`, `process_refund_updated!`
 - **What happens:** it calls `process_refund_failed!(refund)`, but that method takes no arguments. Ruby raises an `ArgumentError` (wrong number of arguments), the controller returns 422, and Stripe keeps retrying. The refund stays `pending` and keeps reserving `refundable_amount`.
 - **Fix:** split the handler. `process_refund_failed!` (the event entry point) finds and validates the refund, then calls a new `mark_refund_failed!(refund)`, which `process_refund_updated!` can also call.
 
-### H2. A `payout.canceled` event crashes
+### H2. A `payout.canceled` event crashes — FIXED (test: `test/services/payments/process_stripe_webhook_test.rb`)
 - **Where:** `process_stripe_webhook.rb`, `process_withdrawal_cancelled!`
 - **What happens:** it sets `status: :cancelled`, but the enum value is `canceled`. Rails raises `ArgumentError` ("'cancelled' is not a valid status"), Stripe retries forever, and the withdrawal stays `pending`, holding funds.
 - **Fix:** use `:canceled`, and rename the method to `process_withdrawal_canceled!`.
 
-### H3. Withdrawal audit logs have no user and no failure reason
+### H3. Withdrawal audit logs have no user and no failure reason — FIXED (test: `test/services/payments/process_stripe_webhook_test.rb`)
 - **Where:** `process_stripe_webhook.rb`, the withdrawal paid, failed and canceled handlers
 - **What happens:**
   - They pass `user: @user`, which is never assigned, so audit rows are saved with `user_id = nil`.
   - On a late failure, `reason: withdrawal.failure_message` is read before the update, so it's always `nil`.
 - **Fix:** use `user: withdrawal.user`, and `reason: payout.failure_message`.
 
-### H4. Permanent webhook errors are retried for days and never marked failed
+### H4. Permanent webhook errors are retried for days and never marked failed — FIXED (tests: `test/services/payments/process_stripe_webhook_errors_test.rb`, `test/controllers/api/v1/webhooks/stripe_controller_test.rb`). A mismatch or missing record raises `ProcessStripeWebhook::InvalidEvent`: the event is marked `failed`, a `webhook_event.failed` audit log is written, and the response is 200. A record whose Stripe id isn't stored yet raises `NotReady` and gets 409, so Stripe retries. Every other error still raises, and Stripe retries it.
 - **Where:** `app/controllers/api/v1/webhooks/stripe_controller.rb` and `process_stripe_webhook.rb`
 - **What happens:** a validation mismatch (amount, id, provider, missing metadata) raises `ArgumentError`, and a missing record raises `RecordNotFound`. Both roll back and return 422 or 404, so Stripe retries for about 3 days. The `WebhookEvent` stays `pending`, the `failed` status is never used, and nobody is alerted.
 - **Fix:**
   - For permanent errors, mark the `WebhookEvent` `failed` with the error message (in a new transaction after the rollback), create a `ReconciliationRecord` or audit entry for an admin, and return 200 so Stripe stops retrying.
   - Let only transient errors (DB deadlock, timeout) return 5xx, so that Stripe retries those.
 
-### H5. Login is broken on bad credentials, and doesn't normalize the email
+### H5. Login is broken on bad credentials, and doesn't normalize the email — FIXED (test: `test/controllers/api/v1/auth/sessions_controller_test.rb`)
 - **Where:** `app/controllers/api/v1/auth/sessions_controller.rb`
 - **What happens:**
   - After `render ... :unauthorized` there's no `return`.
@@ -213,7 +213,7 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
 | M6 | `auth/registrations_controller.rb`, `kyc_controller.rb` | The user and the KYC profile are created outside one transaction, and `KycController` raises `NoMethodError` (500) when the profile is missing. | Wrap the two creates in a transaction; return 404 when there's no profile. |
 | M7 | whole app, `db/seeds.rb` | Nothing creates wallets, wallet accounts, currencies or the `STRIPE_CLEARING_*`/`WITHDRAWAL_CLEARING_*` accounts, so a fresh install can't take a payment (`Deposit` raises `RecordNotFound`). | Seed currencies and clearing accounts idempotently. Create a wallet and a liability account on registration, or add an endpoint for it. |
 | M8 | `application_controller.rb#current_user` | `@current_user if defined?(@current_user)` doesn't `return`, so the token is looked up again every time it's called. | `return @current_user if defined?(@current_user)`. |
-| M9 | `application_controller.rb`, sessions | Users that aren't `active` can still log in and use existing tokens. | Check `user.status == "active"` at login and in `current_user`. |
+| M9 | `application_controller.rb` | Users that aren't `active` can still use existing tokens. (Login now checks status, see H5.) | Check `user.status == "active"` in `current_user`. |
 | M10 | auth endpoints | No rate limiting on login or registration. | Rails 8: `rate_limit to: 10, within: 1.minute, only: :create`. |
 | M11 | `ledger/transfer.rb` | Only account status is checked, so a frozen wallet with an active account can still send or receive. | Check that both `wallet.status == "active"`. |
 | M12 | controllers, `params[:amount].to_i` | `"10.99"`→10, `"1e3"`→1, `"abc"`→0. The amount silently changes. | `Integer(params[:amount], exception: false)` and reject anything that isn't an integer. |
