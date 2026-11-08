@@ -97,6 +97,8 @@ end
 - If it moves money, use the `ledger-operation` skill. If it calls Stripe, create the local `pending` record first and pass its id in Stripe `metadata`.
 
 ## 4. Tests
+Also document the endpoint: add or update its rswag doc spec in `spec/requests/api/v1/...` (every status code the code returns, response schemas from `spec/swagger_helper.rb` with `additionalProperties: false`), then regenerate and commit the YAML with `RAILS_ENV=test RSWAG_DRY_RUN=0 bin/rails rswag:specs:swaggerize`. See `docs/TESTING.md` section 16.
+
 Use the `write-tests` skill. Add an integration test in `test/controllers/api/v1/...` covering:
 - the happy path, including status code and exact response keys
 - 401 with no token or an expired token

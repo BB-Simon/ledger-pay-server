@@ -22,6 +22,7 @@ Contents:
 13. [The workflow: failing test first](#13-the-workflow-failing-test-first)
 14. [Common mistakes](#14-common-mistakes)
 15. [Writing your next test](#15-writing-your-next-test)
+16. [API documentation specs (rswag)](#16-api-documentation-specs-rswag)
 
 ---
 
@@ -947,3 +948,140 @@ These areas from the original testing plan still need tests:
 
 Each of these is a good exercise, and the remaining items in `docs/BUGS.md`
 each start with writing the failing test.
+
+---
+
+## 16. API documentation specs (rswag)
+
+The API is documented with **OpenAPI 3** (also called Swagger). The document is
+`swagger/v1/swagger.yaml`, and in development you can browse it at
+**http://localhost:3000/api-docs**. Click **Authorize** and paste a token from
+`POST /api/v1/auth/login` to try requests from the browser.
+
+Nobody writes that YAML by hand. The **rswag** gem generates it from
+*doc specs* in `spec/requests/api/v1/`. Each documented response is also a real
+request test, so the docs can't quietly drift from what the API does.
+
+### Why there's RSpec in a Minitest app
+
+rswag only works with **RSpec**, a different test framework from Minitest. So
+RSpec is used **only** for these doc specs. Every other test stays Minitest
+(AGENTS.md). The two never mix:
+
+| | Minitest | RSpec (doc specs only) |
+|---|---|---|
+| Folder | `test/` | `spec/requests/` |
+| Run | `bin/rails test` | `bundle exec rspec` |
+| Setup file | `test/test_helper.rb` | `spec/rails_helper.rb` |
+| Fixtures | `test/fixtures/` | the same files (`fixture_paths`) |
+| Faking Stripe | `with_class_method` | `allow(Stripe::Payout).to receive(:create)` (rspec-mocks) |
+
+### Anatomy of a doc spec
+
+```ruby
+require "swagger_helper"
+
+RSpec.describe "Withdrawals", type: :request do
+  let(:Authorization) { bearer_for(users(:alice)) }      # 1
+
+  path "/api/v1/wallets/{wallet_id}/withdrawals" do       # 2
+    parameter name: :wallet_id, in: :path, schema: { type: :integer }
+
+    post "Withdraw to your bank account" do               # 3
+      tags "Withdrawals"
+      consumes "application/json"
+      produces "application/json"
+      parameter name: :body, in: :body, schema: {         # 4
+        type: :object, properties: { amount: { type: :integer } }, required: %w[amount]
+      }
+      let(:wallet_id) { wallets(:alice_usd).id }          # 5
+      let(:body) { { amount: 400 } }
+
+      response "201", "withdrawal created" do             # 6
+        schema "$ref" => "#/components/schemas/Withdrawal"
+        run_test!                                         # 7
+      end
+
+      response "422", "insufficient balance" do
+        schema "$ref" => "#/components/schemas/Error"
+        let(:body) { { amount: 5_000 } }                  # 8
+        run_test!
+      end
+    end
+  end
+end
+```
+
+1. **`let(:Authorization)`** fills in the bearer token. Its name matches the
+   security scheme in `spec/swagger_helper.rb`. `bearer_for` lives in
+   `spec/support/auth_helpers.rb`. `let` is RSpec's way to define a named value
+   for a test.
+2. **`path`** is the URL, with `{placeholders}` for path parameters.
+3. **`post "summary"`** is the operation and its one-line summary in the docs.
+4. **`parameter`** documents an input: `in: :path`, `:query`, `:header` or
+   `:body`. Shared ones, like the `Idempotency-Key` header, are referenced with
+   `parameter "$ref" => "#/components/parameters/IdempotencyKeyOptional"`.
+5. Every parameter needs a **`let` with the same name**. That's the value the
+   test sends. For a header, the name is the header's: `let(:"Idempotency-Key")`.
+6. **`response "201"`** documents one possible response, and `schema` says what
+   its body looks like.
+7. **`run_test!`** sends the request and checks two things: that the status
+   code is the documented one, and that the body matches the schema. An
+   optional block adds your own checks:
+   `run_test! { expect(withdrawal.reload).to be_succeeded }`.
+8. Each response overrides just the `let`s it needs to trigger that case.
+
+### Schemas live in one place
+
+`spec/swagger_helper.rb` defines the document's skeleton and every shared
+schema (`ApiSchemas::SCHEMAS`): `Payment`, `Withdrawal`, `Error` and so on. Each
+schema mirrors a controller's private `*_json` method, and they all use
+**`additionalProperties: false`**. So if a controller starts returning a field
+that isn't documented, for example an internal one by mistake, the doc spec
+fails. Fields the controller can drop with `.compact` are left out of
+`required`, and fields that can be `null` say `nullable: true`.
+
+**Try it:** rename `amount` to `amount_cents` in `withdrawal_json` and run
+`bundle exec rspec spec/requests/api/v1/withdrawals_spec.rb`. You'll see
+"contains additional properties [amount_cents]" and "did not contain a required
+property of 'amount'". Then undo it.
+
+### How the examples get into the YAML
+
+```sh
+RAILS_ENV=test RSWAG_DRY_RUN=0 bin/rails rswag:specs:swaggerize
+```
+
+This runs every doc spec and writes `swagger/v1/swagger.yaml`.
+`RSWAG_DRY_RUN=0` makes it really run the requests: by default swaggerize does a
+"dry run" that checks nothing. `spec/support/response_examples.rb` stores each
+response's real JSON body as its example.
+
+The YAML is committed, and CI regenerates it and fails if the result differs
+(`git diff --exit-code swagger/`). That only works if every run gives exactly
+the same file, so:
+- **Time is frozen** during doc specs (`travel_to`), so every `created_at` is
+  the same.
+- **Random values** (the login token, the transfer reference) are replaced with
+  placeholders.
+- **Ids are stable** already: loading fixtures resets the database sequences,
+  and swaggerize runs the specs in a fixed order.
+
+### Error bodies are documented as production sends them
+
+In the test environment Rails adds debug fields (`exception`, `traces`) to
+error pages. `spec/rails_helper.rb` turns that off for doc specs, so a missing
+record is documented as production really returns it:
+`{ "status": 404, "error": "Not Found" }` (the `RailsNotFound` schema). Note
+that this differs from the app's usual `{ "error": "..." }` shape.
+
+### Adding or changing an endpoint
+
+1. Add or update the doc spec in `spec/requests/api/v1/`. Document every status
+   code the endpoint can return, and add or adjust its schema in
+   `spec/swagger_helper.rb`.
+2. `bundle exec rspec` must pass.
+3. Regenerate with `RAILS_ENV=test RSWAG_DRY_RUN=0 bin/rails rswag:specs:swaggerize`,
+   and commit the YAML together with the code.
+4. Keep testing the behavior in Minitest as before. The doc spec documents the
+   contract; it doesn't replace the behavior tests.

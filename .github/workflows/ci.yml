@@ -88,3 +88,17 @@ jobs:
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test
+
+      - name: Run API doc specs (rswag)
+        env:
+          RAILS_ENV: test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432
+        run: bundle exec rspec
+
+      # Fails if an endpoint changed without regenerating swagger/v1/swagger.yaml.
+      - name: Check OpenAPI docs are up to date
+        env:
+          RAILS_ENV: test
+          RSWAG_DRY_RUN: "0"
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432
+        run: bin/rails rswag:specs:swaggerize && git diff --exit-code swagger/

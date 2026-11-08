@@ -1,4 +1,11 @@
 Rails.application.routes.draw do
+  # API docs (Swagger UI + OpenAPI file). Development and test only: the
+  # rswag gems aren't installed in production.
+  if Rails.env.local?
+    mount Rswag::Ui::Engine => "/api-docs"
+    mount Rswag::Api::Engine => "/api-docs"
+  end
+
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
   namespace :api do
     namespace :v1 do
