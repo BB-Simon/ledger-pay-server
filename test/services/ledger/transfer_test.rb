@@ -68,4 +68,20 @@ class Ledger::TransferTest < ActiveSupport::TestCase
 
     assert_equal 0, accounts(:alice_usd).reload.balance
   end
+
+  # M11
+  test "a frozen sending wallet can't transfer" do
+    @alice_wallet.update!(status: "frozen")
+
+    error = assert_raises(ArgumentError) { transfer(100) }
+    assert_equal "Source wallet must be active", error.message
+  end
+
+  test "a frozen receiving wallet can't receive" do
+    @bob_wallet.update!(status: "frozen")
+
+    error = assert_raises(ArgumentError) { transfer(100) }
+    assert_equal "Destination wallet must be active", error.message
+    assert_equal 1_000, accounts(:alice_usd).reload.balance
+  end
 end

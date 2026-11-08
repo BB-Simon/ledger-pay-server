@@ -55,9 +55,8 @@ module Ledger
       raise ArgumentError, "Withdrawal must be succeeded" unless
         @withdrawal.succeeded?
 
-      raise ArgumentError, "Wallet must be active" unless
-        @withdrawal.wallet.status == "active"
-
+      # No wallet status check: the payout already left at Stripe, so it
+      # settles even if the wallet was frozen while it was in flight.
       raise ArgumentError, "Wallet account is required" unless
         @withdrawal.wallet.account
 

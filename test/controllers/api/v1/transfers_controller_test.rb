@@ -70,4 +70,32 @@ class Api::V1::TransfersControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert_equal 0, accounts(:bob_usd).reload.balance
   end
+  # M12: amounts that aren't whole numbers of cents are rejected, not truncated.
+  [ "10.99", "1e3", "abc", "", "0x1A", " 3 00" ].each do |bad_amount|
+    test "rejects the amount #{bad_amount.inspect} without moving money" do
+      assert_no_difference -> { LedgerEntry.count } do
+        post_transfer(headers: @headers.merge("Idempotency-Key" => "bad-#{bad_amount}"), amount: bad_amount)
+      end
+
+      assert_response :unprocessable_entity
+      assert_equal "Amount must be a positive integer", response.parsed_body["error"]
+    end
+  end
+
+  test "accepts an amount sent as a JSON integer" do
+    post "/api/v1/transfers",
+      params: { from_wallet_id: wallets(:alice_usd).id, to_wallet_id: wallets(:bob_usd).id, amount: 250 }.to_json,
+      headers: @headers.merge("Idempotency-Key" => "json-int", "Content-Type" => "application/json")
+
+    assert_response :created
+    assert_equal 250, accounts(:bob_usd).reload.balance
+  end
+
+  test "rejects an amount sent as a JSON decimal" do
+    post "/api/v1/transfers",
+      params: { from_wallet_id: wallets(:alice_usd).id, to_wallet_id: wallets(:bob_usd).id, amount: 10.99 }.to_json,
+      headers: @headers.merge("Idempotency-Key" => "json-float", "Content-Type" => "application/json")
+
+    assert_response :unprocessable_entity
+  end
 end

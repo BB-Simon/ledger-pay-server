@@ -9,7 +9,7 @@ module Api
         result = Payments::CreatePayment.call(
           user: current_user,
           wallet: wallet,
-          amount: params[:amount].to_i,
+          amount: amount_param,
         )
 
         payment = result[:payment]
@@ -18,6 +18,12 @@ module Api
 
       rescue ArgumentError => e
         render json: { error: e.message }, status: :unprocessable_entity
+      # The payment is already marked failed in both cases.
+      rescue *StripeErrors::DEFINITE_FAILURES => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      rescue Stripe::StripeError
+        render json: { error: "Payment provider unavailable, please try again" },
+          status: :service_unavailable
       end
 
       def show
@@ -30,8 +36,9 @@ module Api
 
         result = Payments::CreateRefund.call(
           payment: payment,
-          amount: params[:amount].to_i,
-          reason: params[:reason]
+          amount: amount_param,
+          reason: params[:reason],
+          idempotency_key: idempotency_key_header
         )
 
         refund = result[:refund]

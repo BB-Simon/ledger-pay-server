@@ -6,6 +6,10 @@ module Api
       def show
         kyc = current_user.kyc_profile
 
+        unless kyc
+          return render json: { error: "KYC profile not found" }, status: :not_found
+        end
+
         render json: {
           kyc: {
             status: kyc.status,

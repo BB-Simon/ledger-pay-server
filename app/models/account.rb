@@ -17,14 +17,14 @@ class Account < ApplicationRecord
   validates :name, presence: true
   validate :currency_must_match_wallet_currency
 
+  # Summed in the database, so the cost doesn't grow with entries loaded
+  # into Ruby (this runs while account rows are locked).
   def balance
-    ledger_entries.sum do |entry|
-      if increses_with_debit?
-        entry.debit? ? entry.amount : -entry.amount
-      else
-        entry.credit? ? entry.amount : -entry.amount
-      end
-    end
+    totals = ledger_entries.group(:entry_type).sum(:amount)
+    debits = totals.fetch("debit", 0)
+    credits = totals.fetch("credit", 0)
+
+    increses_with_debit? ? debits - credits : credits - debits
   end
 
   private

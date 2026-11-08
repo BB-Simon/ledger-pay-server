@@ -57,6 +57,17 @@ class Api::V1::Auth::SessionsControllerTest < ActionDispatch::IntegrationTest
     assert_rejected
   end
 
+  # M10
+  test "login is rate limited per IP" do
+    10.times { login(email: "alice@example.com", password: "wrong") }
+    assert_response :unauthorized
+
+    login(email: "alice@example.com")
+
+    assert_response :too_many_requests
+    assert_equal({ "error" => "Too many requests, try again later" }, response.parsed_body)
+  end
+
   test "a user who isn't active can't log in, with the same error as bad credentials" do
     users(:alice).update!(status: "suspended")
 

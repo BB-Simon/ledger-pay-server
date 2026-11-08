@@ -30,9 +30,11 @@ class Reconciliation::RecoverStuckItemsJobTest < ActiveSupport::TestCase
     Reconciliation::PaymentJob.jobs.map { |job| job["args"].first }
   end
 
-  # The tests below stub jobs_in_sidekiq, so check the real lookup's
-  # dependencies are loaded (they come from sidekiq/api, not sidekiq).
-  test "the Sidekiq API used to find held jobs is loaded" do
+  # The tests below stub jobs_in_sidekiq, so check that loading the job also
+  # loads what the real lookup uses (sidekiq/api, not loaded by sidekiq).
+  test "loading the job loads the Sidekiq API used to find held jobs" do
+    Reconciliation::RecoverStuckItemsJob # autoload the job in any test order
+
     assert_nothing_raised { [ Sidekiq::RetrySet, Sidekiq::ScheduledSet, Sidekiq::Queue ] }
   end
 

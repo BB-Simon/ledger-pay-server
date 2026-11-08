@@ -5,6 +5,8 @@ module Api
   module V1
     module Auth
       class SessionsController < ApplicationController
+        rate_limit to: 10, within: 1.minute, only: :create, with: -> { render_rate_limited }
+
         def create
           # Emails are stored stripped and downcased (User#normalize_email).
           user = User.find_by(email: params[:email].to_s.strip.downcase)

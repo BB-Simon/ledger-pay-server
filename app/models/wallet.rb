@@ -27,6 +27,8 @@ class Wallet < ApplicationRecord
   # Money that can be spent now: the ledger balance minus funds held for
   # pending withdrawals and pending refunds, which leave the wallet later.
   def available_balance
+    raise ArgumentError, "Wallet account is required" unless account
+
     account.balance - pending_withdrawal_amount - pending_refund_amount
   end
 end

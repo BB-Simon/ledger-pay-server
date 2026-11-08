@@ -64,4 +64,26 @@ class Ledger::SettlementTest < ActiveSupport::TestCase
     assert_equal(-200, @account.reload.balance)
     assert_equal "WITHDRAWAL-#{withdrawal.id}", negative_balance_logs.sole.metadata["reference"]
   end
+
+  # M15: money that already moved at Stripe settles even if the wallet was
+  # frozen while the payout or refund was in flight.
+  test "a payout settles for a wallet frozen after it was requested" do
+    fund(1_000)
+    withdrawal = succeeded_withdrawal(400)
+    @wallet.update!(status: "frozen")
+
+    Ledger::Withdraw.call(withdrawal: withdrawal)
+
+    assert_equal 600, @account.reload.balance
+  end
+
+  test "a refund settles for a wallet frozen after it was requested" do
+    fund(1_000)
+    refund = succeeded_refund(400)
+    @wallet.update!(status: "frozen")
+
+    Ledger::Refund.call(refund: refund)
+
+    assert_equal 600, @account.reload.balance
+  end
 end
