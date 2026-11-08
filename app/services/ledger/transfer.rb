@@ -62,6 +62,14 @@ module Ledger
 
       raise ArgumentError, "Amount must be a positive integer" if
         !@amount.is_a?(Integer) || @amount <= 0
+
+      # A frozen wallet can neither send nor receive, even if its ledger
+      # account is still active.
+      raise ArgumentError, "Source wallet must be active" unless
+        @from_wallet.status == "active"
+
+      raise ArgumentError, "Destination wallet must be active" unless
+        @to_wallet.status == "active"
     end
 
     def lock_accounts!

@@ -8,7 +8,10 @@ Sidekiq::Testing.fake!
 
 module ActiveSupport
   class TestCase
-    setup { Sidekiq::Job.clear_all }
+    setup do
+      Sidekiq::Job.clear_all
+      Rails.cache.clear # rate-limit counters
+    end
 
     # Serial by default: concurrency tests use committed data and several DB
     # connections, and tests swap class methods (e.g. Stripe) temporarily, so

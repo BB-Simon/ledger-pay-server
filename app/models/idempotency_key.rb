@@ -1,6 +1,8 @@
 class IdempotencyKey < ApplicationRecord
   belongs_to :user
   belongs_to :ledger_transaction, class_name: "Transaction", optional: true
+  # The Withdrawal or Refund the request created (see IdempotencyKeys::Claim).
+  belongs_to :resource, polymorphic: true, optional: true
 
   validates :key, presence: true
   validates :request_hash, presence: true

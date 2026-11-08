@@ -45,13 +45,7 @@ module Payments
         }
       )
 
-      intent = Stripe::PaymentIntent.create(
-        amount: @amount,
-        currency: @wallet.currency.code.downcase,
-        metadata: {
-          payment_id: payment.id
-        }
-      )
+      intent = create_intent!(payment)
 
       payment.update!(
         provider_payment_id: intent.id
@@ -64,6 +58,50 @@ module Payments
     end
 
     private
+
+    # The client needs the intent's client_secret to pay, so there's nothing
+    # to retry in the background: any Stripe error marks the payment failed
+    # and is re-raised. If Stripe did create an intent despite a timeout, it
+    # is never confirmed, so no money moves. The idempotency key stops the
+    # Stripe client's own network retries from creating a second intent.
+    def create_intent!(payment)
+      Stripe::PaymentIntent.create(
+        {
+          amount: @amount,
+          currency: @wallet.currency.code.downcase,
+          metadata: {
+            payment_id: payment.id
+          }
+        },
+        {
+          idempotency_key: "payment-#{payment.id}"
+        }
+      )
+    rescue Stripe::StripeError => e
+      mark_failed!(payment, e)
+      raise
+    end
+
+    def mark_failed!(payment, error)
+      definite = StripeErrors::DEFINITE_FAILURES.any? { |klass| error.is_a?(klass) }
+
+      payment.update!(
+        status: :failed,
+        failure_code: definite ? error.code : "provider_unavailable",
+        failure_message: error.message.to_s.truncate(500)
+      )
+
+      AuditLogs::Record.call(
+        action: "payment.failed",
+        auditable: payment,
+        user: @user,
+        metadata: {
+          stage: "submission",
+          error_class: error.class.name,
+          failure_code: payment.failure_code
+        }
+      )
+    end
 
     def validate!
       raise ArgumentError, "Amount must be greater than 0" unless

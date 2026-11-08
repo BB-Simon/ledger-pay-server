@@ -1,22 +1,25 @@
 module Withdrawals
   class CreateWithdrawal
-    def self.call(user:, wallet:, amount:)
+    def self.call(user:, wallet:, amount:, idempotency_key: nil)
       new(
         user: user,
         wallet: wallet,
-        amount: amount
+        amount: amount,
+        idempotency_key: idempotency_key
       ).call
     end
 
-    def initialize(user:, wallet:, amount:)
+    def initialize(user:, wallet:, amount:, idempotency_key: nil)
       @user = user
       @wallet = wallet
       @amount = amount
+      @idempotency_key = idempotency_key
     end
 
     def call
       validate!
 
+      replayed = nil
       withdrawal = Wallet.transaction do
         wallet = Wallet.find(@wallet.id)
         raise ArgumentError, "Wallet account is required" unless wallet.account
@@ -25,9 +28,17 @@ module Withdrawals
         # so withdrawals and transfers from one wallet run one at a time.
         wallet.account.lock!
 
+        # Before the balance check: a replay must return the original
+        # withdrawal, not fail because that withdrawal now holds the funds.
+        key = claim_idempotency_key!(wallet)
+        if key&.resource
+          replayed = key.resource
+          next replayed
+        end
+
         validate_wallet_balance!(wallet)
 
-        Withdrawal.create!(
+        created = Withdrawal.create!(
           user: @user,
           wallet: wallet,
           amount: @amount,
@@ -35,7 +46,13 @@ module Withdrawals
           provider: "stripe",
           status: :pending
         )
+
+        key&.update!(resource: created, status: "completed")
+        created
       end
+
+      # Already created and submitted by the original request.
+      return withdrawal.reload if replayed
 
       AuditLogs::Record.call(
         action: "withdrawal.created",
@@ -65,6 +82,16 @@ module Withdrawals
     end
 
     private
+
+    def claim_idempotency_key!(wallet)
+      return unless @idempotency_key
+
+      IdempotencyKeys::Claim.call(
+        user: @user,
+        key: @idempotency_key,
+        request_hash: IdempotencyKeys::Claim.request_hash("withdrawal", wallet.id, @amount)
+      )
+    end
 
     def validate!
       raise ArgumentError, "Amount must be a positive integer" unless

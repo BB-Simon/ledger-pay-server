@@ -35,8 +35,8 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 
 - `Wallet` (user-facing) has one `Account`. `Account` has many `LedgerEntry`, and those entries are grouped under a `Transaction` via FK `ledger_transaction_id`. Don't confuse the `Transaction` model with `ActiveRecord` `.transaction` blocks.
 - `Ledger::PostTransaction` is the **only** place that writes ledger entries. It enforces at least 2 entries, positive integer amounts, active accounts, a single currency, and debits == credits. All other ledger services (`Deposit`, `Transfer`, `Withdraw`, `Refund`, `ReverseWithdrawal`) build entry lists and delegate to it.
-- Amounts are **integers in minor units** (cents). Balances are derived, not stored: `Account#balance` sums entries according to account type (asset/expense increase with debits). `Wallet#available_balance` subtracts pending withdrawals.
-- External money flows go through system clearing accounts that are looked up by code: `STRIPE_CLEARING_<CUR>` and `WITHDRAWAL_CLEARING_<CUR>`. These must exist in the DB because `db/seeds.rb` doesn't create them. `Currency#normalize_code` stores codes in upper case, so the codes are always `..._USD`.
+- Amounts are **integers in minor units** (cents). Balances are derived, not stored: `Account#balance` sums entries according to account type (asset/expense increase with debits). `Wallet#available_balance` subtracts pending withdrawals and pending refunds.
+- External money flows go through system clearing accounts that are looked up by code: `STRIPE_CLEARING_<CUR>` and `WITHDRAWAL_CLEARING_<CUR>`. `db/seeds.rb` creates them (and the USD currency) idempotently. Registration opens a USD wallet with its liability account (`Wallets::Open`). `Currency#normalize_code` stores codes in upper case, so the codes are always `..._USD`.
 - `Transfer` takes row locks on both accounts in id order to avoid deadlocks. `IdempotentTransfer` wraps it using `IdempotencyKey` (unique per user + key, with a request-hash check) from the `Idempotency-Key` header.
 - Significant state changes call `AuditLogs::Record.call(action:, auditable:, user:, metadata:)`.
 
@@ -58,7 +58,7 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 
 ## Notes
 
-- Tests cover the ledger, Stripe submission, webhooks, auth, transfers, withdrawals, and reconciliation (see `docs/TESTING.md`). Model tests are still empty stubs.
+- Tests cover the ledger, Stripe submission, webhooks, auth, transfers, withdrawals, and reconciliation (see `docs/TESTING.md`). Some model tests are still empty stubs.
 - GitHub CI (`.github/workflows/ci.yml`) runs brakeman, bundler-audit, rubocop, and `bin/rails db:test:prepare test`. It triggers on PRs and on pushes to `master`, while the default branch is `main`.
 - Known bugs are listed in `docs/BUGS.md`, with severity and a fix for each. Don't copy those patterns, and check that file before changing the affected code.
 

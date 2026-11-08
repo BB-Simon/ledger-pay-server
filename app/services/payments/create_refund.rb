@@ -1,16 +1,18 @@
 module Payments
   class CreateRefund
-    def self.call(payment:, amount:, reason:)
-      new(payment, amount, reason).call
+    def self.call(payment:, amount:, reason:, idempotency_key: nil)
+      new(payment, amount, reason, idempotency_key).call
     end
 
-    def initialize(payment, amount, reason)
+    def initialize(payment, amount, reason, idempotency_key = nil)
       @payment = payment
       @amount = amount
       @reason = reason
+      @idempotency_key = idempotency_key
     end
 
     def call
+      replayed = nil
       refund = Payment.transaction do
         @payment = Payment.lock.find(@payment.id)
 
@@ -20,16 +22,30 @@ module Payments
         # can't change between this check and the refund being held.
         @payment.wallet.account.lock!
 
+        # Before validate!: a replay must return the original refund, not
+        # fail because that refund now counts against the refundable amount.
+        key = claim_idempotency_key!
+        if key&.resource
+          replayed = key.resource
+          next replayed
+        end
+
         validate!
 
-        Refund.create!(
+        created = Refund.create!(
           payment: @payment,
           amount: @amount,
           provider: "stripe",
           status: :pending,
           reason: @reason
         )
+
+        key&.update!(resource: created, status: "completed")
+        created
       end
+
+      # Already created and submitted by the original request.
+      return { refund: refund.reload } if replayed
 
       AuditLogs::Record.call(
         action: "refund.created",
@@ -60,6 +76,16 @@ module Payments
     end
 
     private
+    def claim_idempotency_key!
+      return unless @idempotency_key
+
+      IdempotencyKeys::Claim.call(
+        user: @payment.user,
+        key: @idempotency_key,
+        request_hash: IdempotencyKeys::Claim.request_hash("refund", @payment.id, @amount, @reason)
+      )
+    end
+
     def validate!
       raise ArgumentError, "Payment must be succeeded" unless
         @payment.succeeded?

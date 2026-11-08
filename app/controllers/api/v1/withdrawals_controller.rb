@@ -9,7 +9,8 @@ module Api
         withdrawal = Withdrawals::CreateWithdrawal.call(
           user: current_user,
           wallet: wallet,
-          amount: params[:amount].to_i
+          amount: amount_param,
+          idempotency_key: idempotency_key_header
         )
 
         render json: withdrawal_json(withdrawal),

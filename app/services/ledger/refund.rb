@@ -58,9 +58,8 @@ module Ledger
       raise ArgumentError, "Payment must be succeeded" unless
         @refund.payment.succeeded?
 
-      raise ArgumentError, "Wallet must be active" unless
-        @refund.payment.wallet.status == "active"
-
+      # No wallet status check: Stripe already refunded the card, so it
+      # settles even if the wallet was frozen while it was in flight.
       raise ArgumentError, "Wallet account is required" unless
         @refund.payment.wallet.account
     end

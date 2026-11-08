@@ -20,7 +20,7 @@ module Api
             user: current_user,
             from_wallet: from_wallet,
             to_wallet: to_wallet,
-            amount: params[:amount].to_i,
+            amount: amount_param,
             idempotency_key: idempotency_key
           )
 

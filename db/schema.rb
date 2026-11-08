@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_29_165417) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_08_181726) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -69,10 +69,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_165417) do
     t.string "key", null: false
     t.bigint "ledger_transaction_id"
     t.string "request_hash", null: false
+    t.bigint "resource_id"
+    t.string "resource_type"
     t.string "status", default: "processing", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.index ["ledger_transaction_id"], name: "index_idempotency_keys_on_ledger_transaction_id"
+    t.index ["resource_type", "resource_id"], name: "index_idempotency_keys_on_resource"
     t.index ["user_id", "key"], name: "index_idempotency_keys_on_user_id_and_key", unique: true
     t.index ["user_id"], name: "index_idempotency_keys_on_user_id"
   end
@@ -84,7 +87,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_165417) do
     t.bigint "user_id", null: false
     t.string "verification_level"
     t.datetime "verified_at"
-    t.index ["user_id"], name: "index_kyc_profiles_on_user_id"
+    t.index ["user_id"], name: "index_kyc_profiles_on_user_id", unique: true
   end
 
   create_table "ledger_entries", force: :cascade do |t|
