@@ -30,4 +30,19 @@ class AccountTest < ActiveSupport::TestCase
 
     assert_equal 0, loaded
   end
+
+  # L6: WITHDRAWAL_CLEARING stays an asset, so payouts make it negative.
+  test "withdrawal clearing goes negative by the amount paid out and back on reversal" do
+    withdrawal = Withdrawal.create!(
+      user: users(:alice), wallet: wallets(:alice_usd), currency: currencies(:usd), amount: 400,
+      provider: "stripe", provider_withdrawal_id: "po_l6", status: :succeeded
+    )
+    clearing = accounts(:withdrawal_clearing_usd)
+
+    Ledger::Withdraw.call(withdrawal: withdrawal)
+    assert_equal(-400, clearing.balance)
+
+    Ledger::ReverseWithdrawal.call(withdrawal: withdrawal)
+    assert_equal 0, clearing.balance
+  end
 end

@@ -44,7 +44,6 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 
 - Create: `Payments::CreatePayment`, `Payments::CreateRefund`, and `Withdrawals::CreateWithdrawal` → `CreateProviderWithdrawal` create a local `pending` record first, then call Stripe with the local id in Stripe `metadata` (`payment_id` / `refund_id` / `withdrawal_id`).
 - Settle: `POST /api/v1/webhooks/stripe` → `Payments::ProcessStripeWebhook`. It stores each event in `WebhookEvent` (unique on event_id, so redelivered events are deduped), locks it, and dispatches on `event.type`. Handlers look up the local record from metadata, re-lock it, check that provider id/amount/currency match, update status, and **only then post to the ledger**: deposits on `payment_intent.succeeded`, refunds on refund success, and withdrawals on `payout.paid`. `ReverseWithdrawal` runs on a late `payout.failed`. Handlers are idempotent through status guards.
-- `Payments::ProcessStripeRefundWebhook` is currently unused. Refund events are handled in `ProcessStripeWebhook`.
 
 ### Reconciliation (`app/services/reconciliation/`, `app/jobs/reconciliation/`)
 
@@ -53,7 +52,7 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 - Per-item jobs are thin; the work is in `Reconciliation::ProcessItem`. It claims the item under a lock (`pending` → `processing`, which is skipped if another worker claimed it within the last 15 min), fetches the Stripe object, and calls `ReconcilePayment` / `ReconcileRefund` / `ReconcilePayout`. Those create a `ReconciliationRecord` that is matched, or a discrepancy with a `discrepancy_type`; amount, currency and status are all compared. Then it calls `RecordResult` and `CompleteRunItem`. A record Stripe doesn't have, or one with no Stripe id, becomes a `missing_provider_record` discrepancy. When retries are exhausted, the item is marked `failed`.
 - Runs check records created in the last 24h, records still `pending` at any age, and pending records that never got a Stripe id after 6h (`Run::RECENT_WINDOW`, `UNSUBMITTED_AFTER`). `CreateRecord` reopens a resolved discrepancy when a different one is found.
 - `CompleteRunItem` is the only thing that moves an item to a terminal status. It recomputes run counters and the run status under a run lock, and never overwrites a terminal item.
-- `Reconciliation::RecoverStuckItemsJob` lives in `app/services/reconciliation/` even though it is a job. It resets stale `processing` items and re-enqueues stale `pending` ones.
+- `Reconciliation::RecoverStuckItemsJob` (`app/jobs/reconciliation/`) resets stale `processing` items and re-enqueues stale `pending` ones whose job Sidekiq no longer holds.
 - Admins can resolve discrepancies (`ResolveRecord`) and retry run items (`RetryRunItem`) through the admin endpoints.
 
 ## Notes

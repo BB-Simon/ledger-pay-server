@@ -64,6 +64,8 @@ module Ledger
         @withdrawal.wallet.currency_id == @withdrawal.currency_id
     end
 
+    # An asset account, so these credits drive its balance negative: minus
+    # the total paid out. Expected, see db/seeds.rb.
     def clearing_account
       Account.find_by!(
         code: "WITHDRAWAL_CLEARING_#{@withdrawal.currency.code}"

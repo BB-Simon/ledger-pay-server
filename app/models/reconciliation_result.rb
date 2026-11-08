@@ -3,7 +3,6 @@ class ReconciliationResult < ApplicationRecord
   belongs_to :reconciliation_record, optional: true
 
   enum :status, {
-    # pending: "pending",
     matched: "matched",
     discrepancy: "discrepancy",
     failed: "failed"
