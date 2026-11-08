@@ -168,7 +168,9 @@ Each entry gives the location, what happens, and the fix. Every fix needs a fail
 - **What happens:** the item jobs call `item.terminal?` when claiming an item, and `CompleteRunItem` calls it when finishing one, but the model only had a `terminal` *scope*. Every item job raised `NoMethodError`, so no reconciliation item could ever complete, and marking an item failed after its retries ran out crashed too.
 - **Fix:** add `ReconciliationRunItem#terminal?` (status is matched, discrepancy or failed).
 
-### H12. Nothing enforces ledger immutability
+### H12. Nothing enforces ledger immutability — PARTLY FIXED (tests: `test/models/ledger_entry_test.rb`, `test/models/transaction_test.rb`)
+- **Done (2026-11-08):** `LedgerEntry` and `Transaction` now have `readonly?` returning `persisted?`, so ActiveRecord raises `ReadOnlyRecord` on any update, `update_column` or `destroy` of a posted row. Along the way, `Transaction has_one :idempotency_key` was fixed: it was missing `foreign_key: :ledger_transaction_id` and raised `PG::UndefinedColumn` whenever it was used. Its `dependent:` options and those on `ledger_entries` were removed, since a read-only transaction is never destroyed.
+- **Not done:** the Postgres trigger. The app uses `db/schema.rb`, which can't store triggers, so test, CI and fresh production databases (`db:prepare` loads the schema) wouldn't get it. Raw SQL (`update_all`, `delete_all`, `psql`) can still change ledger rows. To finish: switch to `config.active_record.schema_format = :sql` (structure.sql), or add the `fx` gem, then add the trigger migration.
 - **Where:** `app/models/ledger_entry.rb`, `app/models/transaction.rb`
 - **What happens:** posted entries and transactions can be updated or deleted through ActiveRecord or SQL. `AuditLog` already has `readonly?`, but the ledger models don't.
 - **Fix:**
