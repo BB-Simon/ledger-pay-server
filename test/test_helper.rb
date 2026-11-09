@@ -3,6 +3,8 @@ require_relative "../config/environment"
 require "rails/test_help"
 require "sidekiq/testing"
 
+Rails.root.glob("test/support/**/*.rb").sort.each { |file| require file }
+
 # Jobs are pushed to an in-memory array (Job.jobs), never to Redis.
 Sidekiq::Testing.fake!
 
@@ -20,6 +22,9 @@ module ActiveSupport
 
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all
+
+    include LedgerAssertions
+    include StripeEventHelpers
 
     # Temporarily replaces a class method and always restores the original.
     # The replacement receives the original method first:

@@ -23,6 +23,7 @@ Contents:
 14. [Common mistakes](#14-common-mistakes)
 15. [Writing your next test](#15-writing-your-next-test)
 16. [API documentation specs (rswag)](#16-api-documentation-specs-rswag)
+17. [Financial integrity coverage map](#17-financial-integrity-coverage-map)
 
 ---
 
@@ -937,17 +938,10 @@ Checklist before calling a test done:
 - [ ] It passes when run alone (`bin/rails test path:line`) **and** in the full suite.
 - [ ] The test name says what *should* happen.
 
-### What isn't tested yet
+### Where each guarantee is tested
 
-These areas from the original testing plan still need tests:
-
-- endpoint tests for 401/403/404 and customer-vs-admin access;
-- webhook signature failures, duplicate and out-of-order events;
-- reconciliation (matching, discrepancies, retries, counters);
-- ledger immutability (bug H12).
-
-Each of these is a good exercise, and the remaining items in `docs/BUGS.md`
-each start with writing the failing test.
+See [section 17](#17-financial-integrity-coverage-map) for every financial
+integrity guarantee and the test that proves it.
 
 ---
 
@@ -1085,3 +1079,68 @@ that this differs from the app's usual `{ "error": "..." }` shape.
    and commit the YAML together with the code.
 4. Keep testing the behavior in Minitest as before. The doc spec documents the
    contract; it doesn't replace the behavior tests.
+
+---
+
+## 17. Financial integrity coverage map
+
+Each money guarantee, and the tests that prove it. When you change one of
+these flows, run the listed tests first. If a guarantee changes, update this
+table.
+
+### Shared helpers (`test/support/`, loaded by `test_helper.rb`)
+
+- **`LedgerAssertions#assert_ledger_balanced`** checks the whole ledger:
+  - every transaction has at least two entries, and its debits equal its credits;
+  - total debits equal total credits;
+  - the trial balance holds: debit-normal accounts (asset, expense) total the
+    same as credit-normal ones (liability, equity, revenue).
+
+  Call it after any test that moves money. `balance_of(:alice_usd)` reloads an
+  account fixture and returns its balance.
+- **`StripeEventHelpers`** builds Stripe events for local records and runs
+  them through the real webhook processor:
+  - `stripe_event(type, object)` builds the event, and `deliver(event)` processes it;
+  - `payment_intent_object`, `refund_object` and `payout_object` build the
+    Stripe object for a local `Payment`, `Refund` or `Withdrawal`, with the
+    right id, amount and metadata.
+
+### Coverage
+
+| Area | Guarantee | Tests |
+|---|---|---|
+| Transfers | Sender is debited and recipient credited by the amount | `services/ledger/transfer_test.rb`, `integration/money_lifecycle_test.rb` |
+| Double-entry ledger | Every transaction balances; the trial balance holds after every flow | `services/ledger/post_transaction_test.rb`, `integration/money_lifecycle_test.rb`, `assert_ledger_balanced` in the money tests |
+| Double-entry ledger | Unbalanced, single-entry, non-positive, wrong-currency or inactive-account postings are refused, with nothing written | `services/ledger/post_transaction_test.rb` |
+| Ledger immutability | Posted entries and transactions can't be updated or deleted; mistakes are fixed with compensating transactions | `models/ledger_entry_test.rb`, `models/transaction_test.rb` |
+| Insufficient funds | A transfer over the available balance (balance minus holds) is refused and changes nothing | `services/ledger/transfer_test.rb` |
+| Idempotency | The same key returns the original result and moves money once; the same key with different parameters is refused | `services/ledger/idempotent_transfer_test.rb`, `controllers/api/v1/withdrawals_controller_test.rb`, `controllers/api/v1/payments_controller_test.rb` |
+| Idempotency | Two simultaneous requests with the same key move money once | `services/ledger/idempotent_transfer_concurrency_test.rb` |
+| Concurrent transfers | Simultaneous transfers with different keys can't overspend: the second waits for the lock and is refused; 4 x 300 from 1,000 moves exactly 900 | `services/ledger/concurrent_transfers_test.rb` |
+| Concurrent transfers | A transfer during a withdrawal can't spend the held money | `services/ledger/transfer_withdrawal_concurrency_test.rb` |
+| Payments | Success credits the wallet once; failure and cancel never touch the ledger; success after a declined attempt credits once; a wrong amount credits nothing | `services/payments/webhook_integrity_test.rb` |
+| Payments | Submission: idempotency key, a Stripe rejection (422) or an unknown outcome (503) marks the payment failed | `controllers/api/v1/payments_controller_test.rb` |
+| Webhooks | The same event twice, or two events for one payment, move money once, sequentially and **at the same moment** | `services/payments/webhook_integrity_test.rb`, `services/payments/webhook_concurrency_test.rb` |
+| Webhooks | Out-of-order events are ignored: cancel after success, paid after failed, canceled after paid, refund success after failure | `services/payments/webhook_integrity_test.rb` |
+| Webhooks | Invalid signatures are rejected; events that can never succeed are recorded as failed and acknowledged; events that arrive too early get 409 and are retried | `controllers/api/v1/webhooks/stripe_controller_test.rb`, `services/payments/process_stripe_webhook_errors_test.rb` |
+| Refunds | Partial refunds can add up to exactly the payment and no further; a failed refund's amount is refundable again; a refund the wallet can't cover is refused before Stripe | `services/payments/webhook_integrity_test.rb`, `services/payments/create_refund_test.rb` |
+| Refunds | Settlement posts even if the wallet can't cover it (flagged), and only once | `services/ledger/settlement_test.rb`, `services/payments/webhook_integrity_test.rb` |
+| Withdrawals | A payout that fails or is canceled before being paid never debits the wallet and releases the hold | `services/payments/webhook_integrity_test.rb`, `services/withdrawals/submit_withdrawal_test.rb` |
+| Withdrawals | A late failure after payment reverses the debit exactly once | `services/payments/webhook_integrity_test.rb`, `services/payments/process_stripe_webhook_test.rb`, `integration/money_lifecycle_test.rb` |
+| Reconciliation | Matching, amount, currency and status discrepancies, Stripe 404s, unsubmitted records | `jobs/reconciliation/item_jobs_test.rb` |
+| Reconciliation | Run counters and final status for a mixed run (matched, discrepancy, failed) | `jobs/reconciliation/run_lifecycle_test.rb` |
+| Reconciliation | Each run keeps its own snapshot; a later run doesn't rewrite history | `jobs/reconciliation/run_lifecycle_test.rb`, `services/reconciliation/record_result_test.rb` |
+| Reconciliation | Retry flow: a failed item retried by an admin finishes the run; stuck items are recovered without duplicate jobs | `jobs/reconciliation/run_lifecycle_test.rb`, `jobs/reconciliation/recover_stuck_items_job_test.rb`, `controllers/api/v1/admin/reconciliation_runs_controller_test.rb` |
+| Reconciliation | Two workers on one item: only one calls Stripe and records a result | `jobs/reconciliation/concurrent_workers_test.rb` |
+| Authorization | Every non-public route requires a valid token, and every admin route refuses customers. These checks walk the route table, so new endpoints are covered automatically | `integration/authorization_test.rb` |
+| Authorization | Customers can't read or use another customer's payments, refunds, withdrawals or wallets, and nothing is created, moved or sent to Stripe when they try | `integration/authorization_test.rb` |
+
+### Why some of these tests aren't transactional
+
+The `concurrent_*` and `*_concurrency_test.rb` files set
+`self.use_transactional_tests = false`, because each thread needs its own
+database connection to see the others' committed data (see section 10).
+They delete what they create in `teardown`.
+
+If you stop one of these runs halfway, rows can be left in the test
+database. Reset it with `bin/rails db:test:prepare`.

@@ -60,7 +60,7 @@ Auth is a hand-rolled bearer token. `ApplicationController#current_user` SHA256-
 
 ## Notes
 
-- Tests cover the ledger, Stripe submission, webhooks, auth, transfers, withdrawals, and reconciliation (see `docs/TESTING.md`). Some model tests are still empty stubs.
+- Tests cover the ledger, Stripe submission, webhooks, auth, transfers, withdrawals, reconciliation and authorization. `docs/TESTING.md` section 17 maps every financial-integrity guarantee to its tests. Use `assert_ledger_balanced` and the Stripe event helpers in `test/support/` for new money tests. Some model tests are still empty stubs.
 - GitHub CI (`.github/workflows/ci.yml`) runs brakeman, bundler-audit, rubocop, and `bin/rails db:test:prepare test`. It triggers on PRs and on pushes to `master`, while the default branch is `main`.
 - Known bugs are listed in `docs/BUGS.md`, with severity and a fix for each. Don't copy those patterns, and check that file before changing the affected code.
 
